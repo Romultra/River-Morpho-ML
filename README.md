@@ -25,6 +25,15 @@
 
 ---
 
+## 📚 Documentation
+
+For detailed information about this repository:
+
+- **[QUICK_START.md](QUICK_START.md)** - 5-minute quick start guide
+- **[REPOSITORY_SUMMARY.md](REPOSITORY_SUMMARY.md)** - Comprehensive project documentation
+
+---
+
 ## Repository structure
 
 The structure of this repository is the following:
