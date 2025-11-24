@@ -117,7 +117,10 @@ class TemporalTransformerBlock(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
         # Project back to scalar per time-step
-        self.output_proj = nn.Linear(d_model, 1) 
+        self.output_proj = nn.Linear(d_model, 1)
+
+        # max "batch" size (B*H*W) we feed to the transformer at once
+        self.max_tokens = 60000
 
     def forward(self, x):
         """
@@ -135,8 +138,18 @@ class TemporalTransformerBlock(nn.Module):
         # Project to d_model
         x = self.input_proj(x)             # (B*H*W, T, d_model)
 
-        # Transformer encoder over the time axis
-        x = self.encoder(x)                # (B*H*W, T, d_model)
+        # Run transformer in chunks to avoid 65535 batch limit (not specific to gpu, is universal)
+        total_tokens = x.shape[0]         # this is B*H*W
+        if total_tokens > self.max_tokens:
+            chunks = []
+            for start in range(0, total_tokens, self.max_tokens):
+                end = min(start + self.max_tokens, total_tokens)
+                x_chunk = x[start:end]            # (chunk_size, T, d_model)
+                x_chunk = self.encoder(x_chunk)   # same shape
+                chunks.append(x_chunk)
+            x = torch.cat(chunks, dim=0)
+        else:
+            x = self.encoder(x)
 
         # Project back to scalar
         x = self.output_proj(x)            # (B*H*W, T, 1)
@@ -147,9 +160,9 @@ class TemporalTransformerBlock(nn.Module):
 
         return x
 
-class UNet3D(nn.Module):
-    def __init__(self, n_channels, n_classes, init_hid_dim=8, kernel_size=3, pooling='max', bilinear=False, drop_channels=False, p_drop=None):
-        super(UNet3D, self).__init__()
+class TransformerUNet(nn.Module):
+    def __init__(self, n_channels, n_classes, use_temporal_transformer=True, init_hid_dim=8, kernel_size=3, pooling='max', bilinear=False, drop_channels=False, p_drop=None):
+        super(TransformerUNet, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
         self.init_hid_dim = init_hid_dim 
@@ -159,14 +172,16 @@ class UNet3D(nn.Module):
         self.drop_channels = drop_channels
         self.p_drop = p_drop
 
-        self.temporal_transformer = TemporalTransformerBlock(
-            T=n_channels,       # the 4 time steps (or however many you use)
-            d_model=16,         # embedding size; safe default
-            nhead=4,            # must divide d_model
-            num_layers=2,
-            dim_feedforward=64,
-            dropout=0.1,
-        )
+        self.use_temporal_transformer = use_temporal_transformer
+        if use_temporal_transformer:
+            self.temporal_transformer = TemporalTransformerBlock(
+                T=n_channels,       # the 4 time steps (or however many you use)
+                d_model=8,         # embedding size; safe default
+                nhead=4,            # must divide d_model
+                num_layers=2,
+                dim_feedforward=64,
+                dropout=0.1,
+            )
 
         hid_dims = [init_hid_dim * (2**i) for i in range(5)]
         self.hid_dims = hid_dims
@@ -195,8 +210,9 @@ class UNet3D(nn.Module):
 
     def forward(self, x):
         # x: (B, T, H, W) where T = n_channels (e.g., 4)
-        x = self.temporal_transformer(x)   # REAL temporal modeling
-
+        if self.use_temporal_transformer:
+            x = self.temporal_transformer(x)
+        
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)

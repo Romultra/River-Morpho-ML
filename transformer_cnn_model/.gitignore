@@ -1,0 +1,4 @@
+cache/
+checkpoints_*/
+scores/
+plots_*_epochs/
