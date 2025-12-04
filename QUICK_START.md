@@ -9,7 +9,7 @@
 ### What is this project?
 Deep learning model (JamUNet/UNet3D) to predict river morphology changes using satellite imagery of the Brahmaputra-Jamuna River.
 
-### Setup
+### Conda Setup
 ```bash
 # 1. Install environment
 conda env create -f braided.yml
@@ -18,6 +18,25 @@ conda activate braided
 # 2. Launch Jupyter
 jupyter lab
 ```
+
+### Pip Install (Alternative)
+Works on Windows with **Python 3.9** and **CUDA 11.8**
+```bash
+# 1. Create and activate virtual environment with Python 3.9
+python3.9 -m venv .venv
+.\.venv\Scripts\activate  # Windows
+source .venv/bin/activate # macOS/Linux
+
+# 2. Install PyTorch with CUDA 11.8 support
+pip install torch==2.0.1 torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# 3. Install Custom GDAL Wheel
+pip install ./GDAL-3.9.2-cp39-cp39-win_amd64.whl
+
+# 4. Install other dependencies
+pip install -r requirements.txt
+```
+
 
 ### Key Directories
 | Directory | Purpose | Size |
