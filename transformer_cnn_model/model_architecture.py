@@ -97,7 +97,7 @@ class TemporalTransformerBlock(nn.Module):
     Input:  x of shape (B, T, H, W)
     Output: x of shape (B, T, H, W)   (same shape)
     """
-    def __init__(self, T, d_model=16, nhead=4, num_layers=2,
+    def __init__(self, T, d_model=8, nhead=4, num_layers=2,
                  dim_feedforward=64, dropout=0.1):
         super().__init__()
 
@@ -161,7 +161,8 @@ class TemporalTransformerBlock(nn.Module):
         return x
 
 class TransformerUNet(nn.Module):
-    def __init__(self, n_channels, n_classes, use_temporal_transformer=True, init_hid_dim=8, kernel_size=3, pooling='max', bilinear=False, drop_channels=False, p_drop=None):
+    def __init__(self, n_channels, n_classes, use_temporal_transformer=True, init_hid_dim=8, kernel_size=3, pooling='max', 
+                 bilinear=False, drop_channels=False, p_drop=None, d_model=8, nhead=4, num_layers=2, dim_feedforward=64, dropout=0.1):
         super(TransformerUNet, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
@@ -176,11 +177,11 @@ class TransformerUNet(nn.Module):
         if use_temporal_transformer:
             self.temporal_transformer = TemporalTransformerBlock(
                 T=n_channels,       # the 4 time steps (or however many you use)
-                d_model=8,         # embedding size; safe default
-                nhead=4,            # must divide d_model
-                num_layers=2,
-                dim_feedforward=64,
-                dropout=0.1,
+                d_model=d_model,         # embedding size; safe default
+                nhead=nhead,            # must divide d_model
+                num_layers=num_layers,
+                dim_feedforward=dim_feedforward,
+                dropout=dropout,
             )
 
         hid_dims = [init_hid_dim * (2**i) for i in range(5)]

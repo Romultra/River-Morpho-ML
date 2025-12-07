@@ -5,16 +5,16 @@ Load a selected checkpoint and generate a misclassification map for a chosen
 test sample (TP / FP / FN / TN).
 Usage example (from repo root):
     conda activate braided
-    python plot_misclassification.py \
+    python -m transformer_cnn_model.plot_misclassification \
         --checkpoint transformer_cnn_model/checkpoints_transformer_unet/transformer_unet_epoch018.pt \
         --sample 3 \
-        --model transformer_unet \
+        --model transunet \
         --save
 
 Options:
     --checkpoint ...  # path to checkpoint .pt file
     --sample 0        # index of test sample to visualize
-    --model ...       # which model to load: transformer_unet / unet / unet3d
+    --model ...       # which model to load: transunet / unet / unet3d
     --threshold 0.5   # water probability threshold
     --save            # save output instead of displaying
 """
@@ -31,6 +31,8 @@ from transformer_cnn_model.model_architecture import TransformerUNet
 from model.st_unet.st_unet import UNet3D
 from transformer_cnn_model.preprocessing.load_data import build_dataloaders
 
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # ---------------------------------------------------------
 # Build model (based on checkpoint + T inferred from data)
@@ -39,7 +41,7 @@ def build_model_from_loader(
     device: torch.device,
     test_loader,
     ckpt_path: Path,
-    model_type: str = "transformer_unet"
+    model_type: str = "transunet"
 ):
     """Infer T from loader and construct the appropriate model."""
 
@@ -48,13 +50,43 @@ def build_model_from_loader(
     print(f"[INFO] Detected T = {T}")
 
     # ---- Select which model to instantiate ----
-    if model_type == "transformer_unet":
+    if model_type == "transunet":
         print("[INFO] Using TransformerUNet model")
-        model = TransformerUNet(n_channels=T, n_classes=1, use_temporal_transformer=True)
+        model = TransformerUNet(
+            n_channels=T,                 # T inferred from data 
+            n_classes=1,                  # binary prediction
+            use_temporal_transformer=True,
+            init_hid_dim=8,
+            kernel_size=3,
+            pooling="max",
+            bilinear=False,
+            drop_channels=False,
+            p_drop=None,
+            d_model=8,
+            nhead=4,
+            num_layers=2,
+            dim_feedforward=64,
+            dropout=0.1,
+        )
     
     elif model_type == "unet":
         print("[INFO] Using TransformerUNet model without transformer")
-        model = TransformerUNet(n_channels=T, n_classes=1, use_temporal_transformer=False)
+        model = TransformerUNet(
+            n_channels=T,                 # T inferred from data 
+            n_classes=1,                  # binary prediction
+            use_temporal_transformer=True,
+            init_hid_dim=8,
+            kernel_size=3,
+            pooling="max",
+            bilinear=False,
+            drop_channels=False,
+            p_drop=None,
+            d_model=8,
+            nhead=4,
+            num_layers=2,
+            dim_feedforward=64,
+            dropout=0.1,
+        )
 
     elif model_type == "unet3d":
         print("[INFO] Using UNet3D (no transformer)")
@@ -170,8 +202,8 @@ def main():
                         help="Path to checkpoint .pt file")
     parser.add_argument("--sample", type=int, default=0,
                         help="Index of test sample to visualize")
-    parser.add_argument("--model", type=str, default="transformer_unet",
-                        choices=["transformer_unet", "unet", "unet3d"],
+    parser.add_argument("--model", type=str, default="transunet",
+                        choices=["transunet", "unet", "unet3d"],
                         help="Which model to load")
     parser.add_argument("--threshold", type=float, default=0.5,
                         help="Water probability threshold")

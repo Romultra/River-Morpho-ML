@@ -31,7 +31,7 @@ def main():
 
     ## ------ All adjustable parameters for loading, training, validation are in this block ------
     # Loading parameters
-    batch_size = 16          # batch size
+    batch_size = 1          # batch size
     num_workers = 12        # number of DataLoader workers
     year_target = 5         # target year for prediction
     use_cache = True        # whether to use cached data
@@ -49,7 +49,7 @@ def main():
     # Training and validation parameters
     lr = 1e-4   # learning rate
     weight_decay = 1e-5      # weight decay for optimizer
-    num_epochs = 100         # number of training epochs
+    num_epochs = 50          # number of training epochs
     nonwater = 0             # label values
     water = 1                # label values
     pixel_size = 60          # size of one pixel in meters
@@ -57,6 +57,23 @@ def main():
     loss_f = "BCE"           # loss function: 'BCE', 'Focal', etc.
     physics = False          # whether to use physics-based loss additions
     verbose = True           # whether to print batch-wise training progress
+
+    # General model parameters for both TransformerUNet and UNet3D
+    init_hid_dim=8          # initial hidden dimension       
+    kernel_size=3           # convolution kernel size
+    pooling='max'           # pooling type: 'max' or 'avg'
+    bilinear=False          # whether to use bilinear upsampling
+    drop_channels=False     # whether to drop channels during downsampling
+    p_drop=None             # dropout probability for CNN layers; None means no dropout
+
+    # Specific parameters for TransformerUNet
+    d_model=8                           # embedding size; safe default
+    nhead=4                             # must divide d_model
+    num_layers=2                        # number of transformer layers
+    dim_feedforward=64                  # feedforward network dimension
+    dropout=0.1                         # dropout for transformer layers
+    n_classes=1                         # binary water prediction
+    use_temporal_transformer=True       # set to True to enable temporal transformer
     ## -------------------------------------------------------------------------------------------
 
     # -----------------------
@@ -69,11 +86,11 @@ def main():
         batch_size=batch_size,           
         num_workers=num_workers,
         pin_memory=pin_memory,
-        year_target=year_target,          # still 4-in / 1-out
+        year_target=year_target,          
         dir_folders=dir_folders,
         device="cpu",           # datasets stay on CPU; batches moved to GPU in train_eval
-        use_cache=use_cache,         # <--- enable caching
-        cache_dir=cache_dir,    # <--- tell it where to store/load .pt files
+        use_cache=use_cache,       
+        cache_dir=cache_dir,   
     )
 
     # Peek at one batch to infer T (number of time steps)
@@ -85,27 +102,37 @@ def main():
     # -----------------------
     # 3. Instantiate the model
     # -----------------------
-    # # Using TransformerUNet with temporal transformer
-    # model = TransformerUNet(
-    #     n_channels=T,   # number of temporal input frames (years)
-    #     n_classes=1,    # binary water prediction
-    #     use_temporal_transformer=True,  # set to True to enable temporal transformer
-    #     # other hyperparameters use defaults from architecture.py
-    # )
-    # model.to(device) 
-
-    # Alternatively, use UNet3D without transformer:
-    model = UNet3D(
-        n_channels=T,
-        n_classes=1,
-        init_hid_dim=8,      
-        kernel_size=3,
-        pooling='max',
-        bilinear=False,
-        drop_channels=False,
-        p_drop=None,
+    # Using TransformerUNet with temporal transformer
+    model = TransformerUNet(
+        n_channels=T,   
+        n_classes=n_classes,    
+        use_temporal_transformer=use_temporal_transformer, 
+        init_hid_dim=init_hid_dim,
+        kernel_size=kernel_size,
+        pooling=pooling,
+        bilinear=bilinear,
+        drop_channels=drop_channels,
+        p_drop=p_drop,
+        d_model=d_model,
+        nhead=nhead,
+        num_layers=num_layers,
+        dim_feedforward=dim_feedforward,
+        dropout=dropout,
     )
-    model.to(device)
+    model.to(device) 
+
+    # # Alternatively, use UNet3D without transformer:
+    # model = UNet3D(
+    #     n_channels=T,
+    #     n_classes=1,
+    #     init_hid_dim=8,      
+    #     kernel_size=3,
+    #     pooling='max',
+    #     bilinear=False,
+    #     drop_channels=False,
+    #     p_drop=None,
+    # )
+    # model.to(device)
 
     # print(model)
 
@@ -119,17 +146,17 @@ def main():
     # -----------------------
     for epoch in range(1, num_epochs + 1):
         print(f"\n===== Epoch {epoch}/{num_epochs} =====")
-        ckpt_path = ckpt_dir / f"unet3d_epoch{epoch:03d}.pt"     # checkpoint path of each epoch
+        ckpt_path = ckpt_dir / f"transunet_epoch{epoch:03d}.pt"     # checkpoint path of each epoch
 
         # ---- Training ----
         train_losses = training_unet(
             model,
             train_loader,
             optimizer,
-            nonwater=0,
-            water=1,
-            pixel_size=60,
-            water_threshold=0.5,
+            nonwater=nonwater,
+            water=water,
+            pixel_size=pixel_size,
+            water_threshold=water_threshold,
             device=str(device),   # training_unet expects a string like 'cuda:0' or 'cpu'
             loss_f="BCE",         # you can try 'Focal' etc if desired
             physics=False,        # set True if you want physics-based loss additions

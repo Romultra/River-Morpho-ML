@@ -166,26 +166,37 @@ def main():
     # -----------------------
     # 4. Prepare model once (we'll reload weights per checkpoint)
     # -----------------------
-    # # Using TransformerUNet 
-    # model = TransformerUNet(
-    #     n_channels=T,   # temporal dimension
-    #     n_classes=1,    # binary prediction
-    #     use_temporal_transformer=True,  
-    # )
-    # model.to(device)
-
-    # Alternatively, use UNet3D without transformer:
-    model = UNet3D(
-        n_channels=T,
-        n_classes=1,
-        init_hid_dim=8,      
+    # Using TransformerUNet 
+    model = TransformerUNet(
+        n_channels=T,                 # T inferred from data 
+        n_classes=1,                  # binary prediction
+        use_temporal_transformer=True,
+        init_hid_dim=8,
         kernel_size=3,
-        pooling='max',
+        pooling="max",
         bilinear=False,
         drop_channels=False,
         p_drop=None,
+        d_model=8,
+        nhead=4,
+        num_layers=2,
+        dim_feedforward=64,
+        dropout=0.1,
     )
     model.to(device)
+
+    # # Alternatively, use UNet3D without transformer:
+    # model = UNet3D(
+    #     n_channels=T,
+    #     n_classes=1,
+    #     init_hid_dim=8,      
+    #     kernel_size=3,
+    #     pooling='max',
+    #     bilinear=False,
+    #     drop_channels=False,
+    #     p_drop=None,
+    # )
+    # model.to(device)
 
     # -----------------------
     # 5. Evaluate each checkpoint on test set
