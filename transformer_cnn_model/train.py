@@ -29,24 +29,50 @@ def main():
         print("Using CPU")
         pin_memory = False
 
+    ## ------ All adjustable parameters for loading, training, validation are in this block ------
+    # Loading parameters
+    batch_size = 16          # batch size
+    num_workers = 12        # number of DataLoader workers
+    year_target = 5         # target year for prediction
+    use_cache = True        # whether to use cached data
+
+    # Data directories
+    dir_folders = "data/satellite/dataset_month3"         # March dataset
+    cache_dir = Path("transformer_cnn_model/cache")       # folder for cached tensors
+    cache_dir.mkdir(exist_ok=True)                        # safe even if it already exists
+
+    # Directory to save checkpoints
+    ckpt_dir = Path("transformer_cnn_model/checkpoints")     # checkpoint directory (trained model epochs saved here)
+    ckpt_dir.mkdir(exist_ok=True)                            # safe even if it already exists
+    # checkpoint path of each epoch saved in 5. Training loop. To modify filename layout, change in that section.
+
+    # Training and validation parameters
+    lr = 1e-4   # learning rate
+    weight_decay = 1e-5      # weight decay for optimizer
+    num_epochs = 100         # number of training epochs
+    nonwater = 0             # label values
+    water = 1                # label values
+    pixel_size = 60          # size of one pixel in meters
+    water_threshold = 0.5    # threshold for water classification from model output probabilities
+    loss_f = "BCE"           # loss function: 'BCE', 'Focal', etc.
+    physics = False          # whether to use physics-based loss additions
+    verbose = True           # whether to print batch-wise training progress
+    ## -------------------------------------------------------------------------------------------
+
     # -----------------------
     # 2. Build DataLoaders
     # -----------------------
     # NOTE: data is always loaded on CPU; we move batches to GPU in the training loop
     print("Building dataloaders (this may take a while the first time)...")
 
-    dir_folders = "data/satellite/dataset_month3"  # March dataset
-    cache_dir = Path("transformer_cnn_model/cache")                      # folder for cached tensors
-    cache_dir.mkdir(exist_ok=True)                 # safe even if it already exists
-
     train_loader, val_loader, test_loader = build_dataloaders(
-        batch_size=1,           # adjust as you like
-        num_workers=8,
+        batch_size=batch_size,           
+        num_workers=num_workers,
         pin_memory=pin_memory,
-        year_target=5,          # still 4-in / 1-out
+        year_target=year_target,          # still 4-in / 1-out
         dir_folders=dir_folders,
         device="cpu",           # datasets stay on CPU; batches moved to GPU in train_eval
-        use_cache=True,         # <--- enable caching
+        use_cache=use_cache,         # <--- enable caching
         cache_dir=cache_dir,    # <--- tell it where to store/load .pt files
     )
 
@@ -59,48 +85,41 @@ def main():
     # -----------------------
     # 3. Instantiate the model
     # -----------------------
-    # Using TransformerUNet with temporal transformer
-    model = TransformerUNet(
-        n_channels=T,   # number of temporal input frames (years)
-        n_classes=1,    # binary water prediction
-        use_temporal_transformer=True,  # set to True to enable temporal transformer
-        # other hyperparameters use defaults from architecture.py
-    )
-    model.to(device) 
-
-    # # Alternatively, use UNet3D without transformer:
-    # model = UNet3D(
-    #     n_channels=T,
-    #     n_classes=1,
-    #     init_hid_dim=8,      
-    #     kernel_size=3,
-    #     pooling='max',
-    #     bilinear=False,
-    #     drop_channels=False,
-    #     p_drop=None,
+    # # Using TransformerUNet with temporal transformer
+    # model = TransformerUNet(
+    #     n_channels=T,   # number of temporal input frames (years)
+    #     n_classes=1,    # binary water prediction
+    #     use_temporal_transformer=True,  # set to True to enable temporal transformer
+    #     # other hyperparameters use defaults from architecture.py
     # )
-    # model.to(device)
+    # model.to(device) 
 
-    
+    # Alternatively, use UNet3D without transformer:
+    model = UNet3D(
+        n_channels=T,
+        n_classes=1,
+        init_hid_dim=8,      
+        kernel_size=3,
+        pooling='max',
+        bilinear=False,
+        drop_channels=False,
+        p_drop=None,
+    )
+    model.to(device)
+
+    # print(model)
 
     # -----------------------
-    # 4. Optimizer & training config
+    # 4. Optimizer
     # -----------------------
-    lr = 1e-4
-    weight_decay = 1e-5
-    num_epochs = 20  # adjust as you like
-
     optimizer = Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-
-    # directory to save checkpoints
-    ckpt_dir = Path("transformer_cnn_model/checkpoints")
-    ckpt_dir.mkdir(exist_ok=True)
 
     # -----------------------
     # 5. Training loop
     # -----------------------
     for epoch in range(1, num_epochs + 1):
         print(f"\n===== Epoch {epoch}/{num_epochs} =====")
+        ckpt_path = ckpt_dir / f"unet3d_epoch{epoch:03d}.pt"     # checkpoint path of each epoch
 
         # ---- Training ----
         train_losses = training_unet(
@@ -139,7 +158,6 @@ def main():
         )
 
         # ---- Save checkpoint ----
-        ckpt_path = ckpt_dir / f"unet_epoch{epoch:03d}.pt"
         torch.save(model.state_dict(), ckpt_path)
         print(f"Saved checkpoint to {ckpt_path}")
 

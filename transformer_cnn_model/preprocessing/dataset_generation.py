@@ -113,6 +113,8 @@ def create_list_images(
             path_image = os.path.join(folder, image)
             list_dir_images.append(path_image)
 
+    # Ensure deterministic ordering across OS/filesystems
+    list_dir_images.sort()
     return list_dir_images
 
 
@@ -363,17 +365,12 @@ def create_split_datasets(
     )
 
     if use_dataset == "training":
-        images_train = [
-            load_image_array(p, scaled_classes=scaled_classes) for p in train_list
-        ]
+        images_train = [load_image_array(p, scaled_classes=scaled_classes)
+                        for p in train_list]
+        years_train = [int(os.path.basename(p).split("_")[0]) for p in train_list]
         avg_train = [
-            load_avg(
-                train_val_test,
-                reach,
-                year,
-                dir_averages="data/satellite/averages",   
-            )
-            for year in range(1988, 1988 + len(images_train))
+            load_avg(train_val_test, reach, year, dir_averages="data/satellite/averages")
+            for year in years_train
         ]
         good_images_train = [
             np.where(img == nodata_value, avg_train[i], img)
@@ -386,17 +383,12 @@ def create_split_datasets(
         return [input_train, target_train]
 
     elif use_dataset == "validation":
-        images_val = [
-            load_image_array(p, scaled_classes=scaled_classes) for p in val_list
-        ]
+        images_val = [load_image_array(p, scaled_classes=scaled_classes)
+                      for p in val_list]
+        years_val = [int(os.path.basename(p).split("_")[0]) for p in val_list]
         avg_val = [
-            load_avg(
-                train_val_test,
-                reach,
-                year,
-                dir_averages="data/satellite/averages",   
-            )
-            for year in range(year_end_train, year_end_train + len(images_val))
+            load_avg(train_val_test, reach, year, dir_averages="data/satellite/averages")
+            for year in years_val
         ]
         good_images_val = [
             np.where(img == nodata_value, avg_val[i], img)
@@ -409,17 +401,12 @@ def create_split_datasets(
         return [input_val, target_val]
 
     elif use_dataset == "testing":
-        images_test = [
-            load_image_array(p, scaled_classes=scaled_classes) for p in test_list
-        ]
+        images_test = [load_image_array(p, scaled_classes=scaled_classes)
+                       for p in test_list]
+        years_test = [int(os.path.basename(p).split("_")[0]) for p in test_list]
         avg_test = [
-            load_avg(
-                train_val_test,
-                reach,
-                year,
-                dir_averages="data/satellite/averages",   # <-- POSIX (fixed)
-            )
-            for year in range(year_end_val, year_end_val + len(images_test))
+            load_avg(train_val_test, reach, year, dir_averages="data/satellite/averages")
+            for year in years_test
         ]
         good_images_test = [
             np.where(img == nodata_value, avg_test[i], img)
