@@ -1,27 +1,53 @@
 """
 eval_all_checkpoints.py
 
-Evaluate *all* selected model checkpoints in a directory
-on the test dataset and save metrics (loss, acc, prec, rec, f1, csi)
-for each epoch into a single CSV file.
+Evaluate all selected model checkpoints in a directory on the *test* dataset
+and save metrics (loss, acc, prec, rec, f1, csi) for each epoch into a single
+CSV file.
 
-Usage example (from repo root):
+By default, all paths and hyperparameters (checkpoint directory, filename
+pattern, output CSV, dataset root, cache directory, year_target, batch_size,
+model architecture, etc.) are taken from `transformer_cnn_model.config`.
+
+Usage example (from repo root)
+------------------------------
     conda activate braided
 
-    python -m transformer_cnn_model.eval_all_checkpoints \
-        --checkpoint-dir transformer_cnn_model/checkpoints \
-        --output-csv transformer_cnn_model/scores/test_metrics_all_epochs.csv
+    # Use all defaults from config.py
+    python -m transformer_cnn_model.eval_all_checkpoints
 
-Options:
-    --checkpoint-dir ...  # directory containing checkpoint .pt files
-                            # (default: transformer_cnn_model/checkpoints)
-    --checkpoint-pattern ...  # glob pattern to match checkpoint files
-                            # (default: transformer_unet_epoch*.pt)
-    --output-csv ...    # output CSV file path (default: transformer_cnn_model/test_metrics_all_epochs.csv)
-    --cpu               # force CPU even if CUDA is available
-    --batch-size 1      # batch size for evaluation
-    --dir-folders ...   # dataset root (default: data/satellite/dataset_month3)
-    --cache-dir ...     # cache directory (default: transformer_cnn_model/cache)
+    # Or override some options from the command line
+    python -m transformer_cnn_model.eval_all_checkpoints \
+        --checkpoint-dir transformer_cnn_model/checkpoints_transunet \
+        --checkpoint-pattern "transunet_epoch*.pt" \
+        --output-csv transformer_cnn_model/scores/test_metrics_all_epochs_transunet.csv
+
+
+Command-line options
+--------------------
+    --checkpoint-dir PATH
+        Directory containing checkpoint .pt files.
+        Default: eval_cfg.checkpoint_dir (from config).
+
+    --checkpoint-pattern GLOB
+        Glob pattern to match checkpoint files (e.g. "transunet_epoch*.pt").
+        Default: eval_cfg.checkpoint_pattern (from config).
+
+    --output-csv PATH
+        Output CSV file path where metrics for all epochs will be written.
+        Default: eval_cfg.scores_csv (from config).
+
+    --cpu
+        Force evaluation on CPU even if CUDA is available.
+        By default, the first CUDA device ("cuda:0") is used if available.
+
+    --dir-folders PATH
+        Root directory of the satellite dataset.
+        Default: data_cfg.dir_folders (from config).
+
+    --cache-dir PATH
+        Directory where cached tensors are stored/loaded.
+        Default: data_cfg.cache_dir (from config).
 """
 
 import argparse
@@ -35,6 +61,7 @@ from transformer_cnn_model.model_architecture import TransformerUNet
 from model.st_unet.st_unet import UNet3D
 from transformer_cnn_model.train_eval_functions.train_eval import validation_unet
 from transformer_cnn_model.preprocessing.load_data import build_dataloaders
+from transformer_cnn_model.config import data_cfg, model_cfg, eval_cfg, train_cfg
 
 
 def parse_args():
@@ -44,28 +71,22 @@ def parse_args():
     parser.add_argument(
         "--checkpoint-dir",
         type=str,
-        default="transformer_cnn_model/checkpoints",
+        default=str(eval_cfg.checkpoint_dir),
         help="Directory containing checkpoint .pt files "
-             "(default: transformer_cnn_model/checkpoints).",
+             f"(default: {eval_cfg.checkpoint_dir}).",
     )
     parser.add_argument(
         "--checkpoint-pattern",
         type=str,
-        default="transformer_unet_epoch*.pt",
+        default=eval_cfg.checkpoint_pattern,
         help="Glob pattern to match checkpoint files "
-             "(default: transformer_unet_epoch*.pt).",
+             f"(default: {eval_cfg.checkpoint_pattern}).",
     )
     parser.add_argument(
         "--output-csv",
         type=str,
-        default="transformer_cnn_model/test_metrics_all_epochs.csv",
+        default=str(eval_cfg.scores_csv),
         help="Path to output CSV file with metrics per epoch.",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=1,
-        help="Batch size for evaluation (default: 1).",
     )
     parser.add_argument(
         "--cpu",
@@ -75,23 +96,23 @@ def parse_args():
     parser.add_argument(
         "--dir-folders",
         type=str,
-        default="data/satellite/dataset_month3",
+        default=data_cfg.dir_folders,
         help="Root folder of the satellite dataset "
-             "(default: data/satellite/dataset_month3).",
+             f"(default: {data_cfg.dir_folders}).",
     )
     parser.add_argument(
         "--cache-dir",
         type=str,
-        default="transformer_cnn_model/cache",
+        default=str(data_cfg.cache_dir),
         help="Directory where cached tensors are stored "
-             "(default: transformer_cnn_model/cache).",
+             f"(default: {data_cfg.cache_dir}).",
     )
     return parser.parse_args()
 
 
 def extract_epoch_from_name(path: Path) -> int:
     """
-    Extracts the epoch number from filenames like 'transformer_unet_epoch010.pt'.
+    Extracts the epoch number from filenames like 'transunet_epoch010.pt'.
 
     Returns an integer epoch, or -1 if no epoch could be parsed.
     """
@@ -147,13 +168,13 @@ def main():
     cache_dir.mkdir(exist_ok=True)
 
     train_loader, val_loader, test_loader = build_dataloaders(
-        batch_size=args.batch_size,
-        num_workers=0,            # evaluation is OK with 0, can increase if desired
+        batch_size=data_cfg.batch_size,
+        num_workers=0,              # evaluation is OK with 0, can increase if desired
         pin_memory=pin_memory,
-        year_target=5,
+        year_target=data_cfg.year_target,   # <--- from config
         dir_folders=args.dir_folders,
-        device="cpu",            # data lives on CPU; moved to GPU in validation_unet
-        use_cache=True,
+        device="cpu",               # data lives on CPU; moved to GPU in validation_unet
+        use_cache=data_cfg.use_cache,
         cache_dir=cache_dir,
     )
 
@@ -166,37 +187,38 @@ def main():
     # -----------------------
     # 4. Prepare model once (we'll reload weights per checkpoint)
     # -----------------------
-    # Using TransformerUNet 
-    model = TransformerUNet(
-        n_channels=T,                 # T inferred from data 
-        n_classes=1,                  # binary prediction
-        use_temporal_transformer=True,
-        init_hid_dim=8,
-        kernel_size=3,
-        pooling="max",
-        bilinear=False,
-        drop_channels=False,
-        p_drop=None,
-        d_model=8,
-        nhead=4,
-        num_layers=2,
-        dim_feedforward=64,
-        dropout=0.1,
-    )
-    model.to(device)
+    if model_cfg.architecture == "transunet":
+        model = TransformerUNet(
+            n_channels=T,  # inferred from data
+            n_classes=model_cfg.n_classes,
+            use_temporal_transformer=model_cfg.use_temporal_transformer,
+            init_hid_dim=model_cfg.init_hid_dim,
+            kernel_size=model_cfg.kernel_size,
+            pooling=model_cfg.pooling,
+            bilinear=model_cfg.bilinear,
+            drop_channels=model_cfg.drop_channels,
+            p_drop=model_cfg.p_drop,
+            d_model=model_cfg.d_model,
+            nhead=model_cfg.nhead,
+            num_layers=model_cfg.num_layers,
+            dim_feedforward=model_cfg.dim_feedforward,
+            dropout=model_cfg.dropout,
+        )
+    elif model_cfg.architecture == "unet3d":
+        model = UNet3D(
+            n_channels=T,
+            n_classes=model_cfg.n_classes,
+            init_hid_dim=model_cfg.init_hid_dim,
+            kernel_size=model_cfg.kernel_size,
+            pooling=model_cfg.pooling,
+            bilinear=model_cfg.bilinear,
+            drop_channels=model_cfg.drop_channels,
+            p_drop=model_cfg.p_drop,
+        )
+    else:
+        raise ValueError(f"Unknown architecture in config: {model_cfg.architecture}")
 
-    # # Alternatively, use UNet3D without transformer:
-    # model = UNet3D(
-    #     n_channels=T,
-    #     n_classes=1,
-    #     init_hid_dim=8,      
-    #     kernel_size=3,
-    #     pooling='max',
-    #     bilinear=False,
-    #     drop_channels=False,
-    #     p_drop=None,
-    # )
-    # model.to(device)
+    model.to(device)
 
     # -----------------------
     # 5. Evaluate each checkpoint on test set
@@ -215,11 +237,11 @@ def main():
         test_losses, acc, prec, rec, f1, csi = validation_unet(
             model,
             test_loader,
-            nonwater=0,
-            water=1,
+            nonwater=train_cfg.nonwater_label,
+            water=train_cfg.water_label,
             device=str(device),
-            loss_f="BCE",
-            water_threshold=0.5,
+            loss_f=train_cfg.loss_f,
+            water_threshold=train_cfg.water_threshold,
         )
 
         mean_test_loss = float(torch.tensor(test_losses).mean())

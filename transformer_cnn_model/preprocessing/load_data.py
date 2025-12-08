@@ -94,6 +94,12 @@ def get_or_create_dataset(
     cache_dir: Optional[Union[str, Path]] = None,
     cache_prefix: str = "month3",
     use_cache: bool = False,
+    year_target: int = 5,            
+    nonwater_threshold: int = 480_000,
+    nodata_value: int = -1,
+    nonwater_value: int = 0,
+    collection: str = r"JRC_GSW1_4_MonthlyHistory",
+    scaled_classes: bool = True,
 ):
 
     """
@@ -127,10 +133,15 @@ def get_or_create_dataset(
     print(f"[CACHE] Building {split} dataset from raw data (this may take a while)...")
     dataset = create_full_dataset(
         train_val_test=split,
+        year_target=year_target,           
+        nonwater_threshold=nonwater_threshold,
+        nodata_value=nodata_value,
+        nonwater_value=nonwater_value,
         dir_folders=dir_folders,
+        collection=collection,
+        scaled_classes=scaled_classes,
         device=device,
         dtype=dtype,
-        # year_target, nonwater_threshold, etc. use their defaults here
     )
 
     # Save to cache (on CPU)
@@ -200,6 +211,7 @@ def build_dataloaders(
         cache_dir=cache_dir,
         cache_prefix=cache_prefix,
         use_cache=use_cache,
+        year_target=year_target,
     )
 
     val_dataset = get_or_create_dataset(
@@ -210,6 +222,7 @@ def build_dataloaders(
         cache_dir=cache_dir,
         cache_prefix=cache_prefix,
         use_cache=use_cache,
+        year_target=year_target,
     )
 
     test_dataset = get_or_create_dataset(
@@ -220,6 +233,7 @@ def build_dataloaders(
         cache_dir=cache_dir,
         cache_prefix=cache_prefix,
         use_cache=use_cache,
+        year_target=year_target,
     )
 
     # Wrap them into DataLoaders

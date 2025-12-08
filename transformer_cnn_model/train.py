@@ -14,6 +14,7 @@ from model.st_unet.st_unet import UNet3D
 from transformer_cnn_model.model_architecture import TransformerUNet
 from transformer_cnn_model.train_eval_functions.train_eval import training_unet, validation_unet
 from transformer_cnn_model.preprocessing.load_data import build_dataloaders
+from transformer_cnn_model.config import data_cfg, model_cfg, train_cfg
 
 
 def main():
@@ -29,71 +30,26 @@ def main():
         print("Using CPU")
         pin_memory = False
 
-    ## ------ All adjustable parameters for loading, training, validation are in this block ------
-    # Loading parameters
-    batch_size = 1          # batch size
-    num_workers = 12        # number of DataLoader workers
-    year_target = 5         # target year for prediction
-    use_cache = True        # whether to use cached data
-
-    # Data directories
-    dir_folders = "data/satellite/dataset_month3"         # March dataset
-    cache_dir = Path("transformer_cnn_model/cache")       # folder for cached tensors
-    cache_dir.mkdir(exist_ok=True)                        # safe even if it already exists
-
-    # Directory to save checkpoints
-    ckpt_dir = Path("transformer_cnn_model/checkpoints")     # checkpoint directory (trained model epochs saved here)
-    ckpt_dir.mkdir(exist_ok=True)                            # safe even if it already exists
-    # checkpoint path of each epoch saved in 5. Training loop. To modify filename layout, change in that section.
-
-    # Training and validation parameters
-    lr = 1e-4   # learning rate
-    weight_decay = 1e-5      # weight decay for optimizer
-    num_epochs = 50          # number of training epochs
-    nonwater = 0             # label values
-    water = 1                # label values
-    pixel_size = 60          # size of one pixel in meters
-    water_threshold = 0.5    # threshold for water classification from model output probabilities
-    loss_f = "BCE"           # loss function: 'BCE', 'Focal', etc.
-    physics = False          # whether to use physics-based loss additions
-    verbose = True           # whether to print batch-wise training progress
-
-    # General model parameters for both TransformerUNet and UNet3D
-    init_hid_dim=8          # initial hidden dimension       
-    kernel_size=3           # convolution kernel size
-    pooling='max'           # pooling type: 'max' or 'avg'
-    bilinear=False          # whether to use bilinear upsampling
-    drop_channels=False     # whether to drop channels during downsampling
-    p_drop=None             # dropout probability for CNN layers; None means no dropout
-
-    # Specific parameters for TransformerUNet
-    d_model=8                           # embedding size; safe default
-    nhead=4                             # must divide d_model
-    num_layers=2                        # number of transformer layers
-    dim_feedforward=64                  # feedforward network dimension
-    dropout=0.1                         # dropout for transformer layers
-    n_classes=1                         # binary water prediction
-    use_temporal_transformer=True       # set to True to enable temporal transformer
-    ## -------------------------------------------------------------------------------------------
-
     # -----------------------
     # 2. Build DataLoaders
     # -----------------------
-    # NOTE: data is always loaded on CPU; we move batches to GPU in the training loop
     print("Building dataloaders (this may take a while the first time)...")
 
+    data_cfg.cache_dir.mkdir(exist_ok=True)
+    train_cfg.ckpt_dir.mkdir(exist_ok=True)
+
     train_loader, val_loader, test_loader = build_dataloaders(
-        batch_size=batch_size,           
-        num_workers=num_workers,
+        batch_size=data_cfg.batch_size,
+        num_workers=data_cfg.num_workers,
         pin_memory=pin_memory,
-        year_target=year_target,          
-        dir_folders=dir_folders,
-        device="cpu",           # datasets stay on CPU; batches moved to GPU in train_eval
-        use_cache=use_cache,       
-        cache_dir=cache_dir,   
+        year_target=data_cfg.year_target,
+        dir_folders=data_cfg.dir_folders,
+        device="cpu",
+        use_cache=data_cfg.use_cache,
+        cache_dir=data_cfg.cache_dir,
     )
 
-    # Peek at one batch to infer T (number of time steps)
+    # Peek at one batch to infer T
     x_sample, y_sample = next(iter(train_loader))
     B, T, H, W = x_sample.shape
     print(f"Sample batch shape: x={x_sample.shape}, y={y_sample.shape}")
@@ -102,65 +58,63 @@ def main():
     # -----------------------
     # 3. Instantiate the model
     # -----------------------
-    # Using TransformerUNet with temporal transformer
-    model = TransformerUNet(
-        n_channels=T,   
-        n_classes=n_classes,    
-        use_temporal_transformer=use_temporal_transformer, 
-        init_hid_dim=init_hid_dim,
-        kernel_size=kernel_size,
-        pooling=pooling,
-        bilinear=bilinear,
-        drop_channels=drop_channels,
-        p_drop=p_drop,
-        d_model=d_model,
-        nhead=nhead,
-        num_layers=num_layers,
-        dim_feedforward=dim_feedforward,
-        dropout=dropout,
-    )
-    model.to(device) 
+    if model_cfg.architecture == "transunet":
+        model = TransformerUNet(
+            n_channels=T,
+            n_classes=model_cfg.n_classes,
+            use_temporal_transformer=model_cfg.use_temporal_transformer,
+            init_hid_dim=model_cfg.init_hid_dim,
+            kernel_size=model_cfg.kernel_size,
+            pooling=model_cfg.pooling,
+            bilinear=model_cfg.bilinear,
+            drop_channels=model_cfg.drop_channels,
+            p_drop=model_cfg.p_drop,
+            d_model=model_cfg.d_model,
+            nhead=model_cfg.nhead,
+            num_layers=model_cfg.num_layers,
+            dim_feedforward=model_cfg.dim_feedforward,
+            dropout=model_cfg.dropout,
+        )
+    elif model_cfg.architecture == "unet3d":
+        model = UNet3D(
+            n_channels=T,
+            n_classes=model_cfg.n_classes,
+            init_hid_dim=model_cfg.init_hid_dim,
+            kernel_size=model_cfg.kernel_size,
+            pooling=model_cfg.pooling,
+            bilinear=model_cfg.bilinear,
+            drop_channels=model_cfg.drop_channels,
+            p_drop=model_cfg.p_drop,
+        )
+    else:
+        raise ValueError(f"Unknown architecture: {model_cfg.architecture}")
 
-    # # Alternatively, use UNet3D without transformer:
-    # model = UNet3D(
-    #     n_channels=T,
-    #     n_classes=1,
-    #     init_hid_dim=8,      
-    #     kernel_size=3,
-    #     pooling='max',
-    #     bilinear=False,
-    #     drop_channels=False,
-    #     p_drop=None,
-    # )
-    # model.to(device)
-
-    # print(model)
+    model.to(device)
 
     # -----------------------
     # 4. Optimizer
     # -----------------------
-    optimizer = Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    optimizer = Adam(model.parameters(), lr=train_cfg.lr, weight_decay=train_cfg.weight_decay)
 
     # -----------------------
     # 5. Training loop
     # -----------------------
-    for epoch in range(1, num_epochs + 1):
-        print(f"\n===== Epoch {epoch}/{num_epochs} =====")
-        ckpt_path = ckpt_dir / f"transunet_epoch{epoch:03d}.pt"     # checkpoint path of each epoch
+    for epoch in range(1, train_cfg.num_epochs + 1):
+        print(f"\n===== Epoch {epoch}/{train_cfg.num_epochs} =====")
+        ckpt_path = train_cfg.ckpt_dir / f"{model_cfg.architecture}_epoch{epoch:03d}.pt"
 
-        # ---- Training ----
         train_losses = training_unet(
             model,
             train_loader,
             optimizer,
-            nonwater=nonwater,
-            water=water,
-            pixel_size=pixel_size,
-            water_threshold=water_threshold,
-            device=str(device),   # training_unet expects a string like 'cuda:0' or 'cpu'
-            loss_f="BCE",         # you can try 'Focal' etc if desired
-            physics=False,        # set True if you want physics-based loss additions
-            verbose=True,         # print batch-wise training progress
+            nonwater=train_cfg.nonwater_label,
+            water=train_cfg.water_label,
+            pixel_size=train_cfg.pixel_size,
+            water_threshold=train_cfg.water_threshold,
+            device=str(device),
+            loss_f=train_cfg.loss_f,
+            physics=train_cfg.physics,
+            verbose=True,
         )
 
         mean_train_loss = float(torch.tensor(train_losses).mean())
