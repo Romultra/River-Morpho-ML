@@ -141,19 +141,24 @@ fig_loss.savefig(loss_plot_path, dpi=300, bbox_inches="tight")
 print(f"Saved loss plot to {loss_plot_path}")
 
 # --------------------------------------------------------------------
-# Plot F1 and CSI vs epoch
+# Plot F1, Precision, Recall, and CSI vs epoch
 # --------------------------------------------------------------------
 fig_scores = plt.figure()
-plt.plot(df["epoch"], df["test_f1"], marker="o", label="F1")
-plt.plot(df["epoch"], df["test_csi"], marker="o", label="CSI")
+
+plt.plot(df["epoch"], df["test_f1"],   marker="o", label="F1")
+plt.plot(df["epoch"], df["test_prec"], marker="o", label="Precision")
+plt.plot(df["epoch"], df["test_rec"],  marker="o", label="Recall")
+plt.plot(df["epoch"], df["test_csi"],  marker="o", label="CSI")
+
 plt.xlabel("Epoch")
 plt.ylabel("Score")
-plt.title(f"F1 and CSI vs Epoch ({arch_name})")
+plt.title(f"F1, Precision, Recall, and CSI vs Epoch ({arch_name})")
 plt.legend()
 plt.grid(True)
 
-scores_plot_path = plots_dir / f"test_f1_csi_{arch_name}.png"
+scores_plot_path = plots_dir / f"test_scores_{arch_name}.png"
 fig_scores.savefig(scores_plot_path, dpi=300, bbox_inches="tight")
-print(f"Saved F1/CSI plot to {scores_plot_path}")
+print(f"Saved score plot to {scores_plot_path}")
+
 
 plt.show()
