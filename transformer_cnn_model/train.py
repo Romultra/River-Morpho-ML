@@ -91,6 +91,13 @@ def main():
 
     model.to(device)
 
+    # Print model summary
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"\nModel: {model_cfg.architecture}")
+    print(f"  Total parameters: {total_params:,}")
+    print(f"  Trainable parameters: {trainable_params:,}")
+
     # -----------------------
     # 4. Optimizer
     # -----------------------
