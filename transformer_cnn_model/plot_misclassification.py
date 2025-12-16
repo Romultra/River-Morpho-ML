@@ -24,7 +24,7 @@ The script then:
 
 Example:
     python -m transformer_cnn_model.plot_misclassification \
-        --year 2018 --reach 3 --split testing --save
+        --year 2018 --reach 3 --split testing --epoch 18 --save
 
 
 ----------------------------------------------------------------------

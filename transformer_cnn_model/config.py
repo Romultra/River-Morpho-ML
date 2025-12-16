@@ -8,7 +8,7 @@ from typing import Optional
 @dataclass
 class DataConfig:
     # Temporal setup
-    year_target: int = 10
+    year_target: int = 5
 
     # Dataset paths
     dir_folders: str = "data/satellite/dataset_month3"
@@ -21,7 +21,7 @@ class DataConfig:
     scaled_classes: bool = True
 
     # DataLoader
-    batch_size: int = 16
+    batch_size: int = 1
     num_workers: int = 12
     use_cache: bool = True
     cache_dir: Path = Path("transformer_cnn_model/cache")
@@ -33,7 +33,7 @@ class DataConfig:
 @dataclass
 class ModelConfig:
     # Which architecture: "transunet" or "unet3d"
-    architecture: str = "transunet"
+    architecture: str = "unet3d"
 
     # Shared UNet params
     init_hid_dim: int = 8
@@ -67,22 +67,22 @@ class TrainConfig:
     physics: bool = False
 
     # Where to save checkpoints
-    ckpt_dir: Path = Path("transformer_cnn_model/checkpoints_transunet_9years")
+    ckpt_dir: Path = Path("transformer_cnn_model/checkpoints_unet3d_base")
 
 
 @dataclass
 class EvalConfig:
     # Pattern for evaluating transformer checkpoints
-    checkpoint_pattern: str = "transunet_epoch*.pt"
+    checkpoint_pattern: str = "unet3d_epoch*.pt"
     # Default directory for checkpoints (can still be overridden via CLI)
-    checkpoint_dir: Path = Path("transformer_cnn_model/checkpoints_transunet_9years")
+    checkpoint_dir: Path = Path("transformer_cnn_model/checkpoints_unet3d_base")
     # Default CSV for scores
     scores_csv: Path = Path(
-        "transformer_cnn_model/scores/test_metrics_all_epochs_transunet_9years.csv"
+        "transformer_cnn_model/scores/test_metrics_all_epochs_unet3d_base.csv"
     )
 
 
-# Single global instances you can import everywhere
+# Single global instances to be imported everywhere
 data_cfg = DataConfig()
 model_cfg = ModelConfig()
 train_cfg = TrainConfig()
