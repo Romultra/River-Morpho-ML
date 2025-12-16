@@ -8,29 +8,38 @@ This script plots:
   • the model prediction for the target year
   • the ground-truth target image
 
-The script supports TWO modes of operation:
+It supports TWO modes of operation:
 
 ----------------------------------------------------------------------
 1) YEAR-BASED MODE (recommended)
 ----------------------------------------------------------------------
-Select a specific year and reach:
+Select a target year and reach:
 
     --year YEAR
     --reach REACH
     --split {training, validation, testing}   (default: testing)
 
 The script then:
-  • Infers the required temporal depth T from config.py (year_target - 1)
-  • Automatically loads the previous T years of images
-  • Uses the specified year as the prediction target
-  • Runs the model and visualizes inputs, prediction, and target
+  • Uses year_target from config.py to build the input sequence:
+        T = year_target - 1
+  • Loads the previous T years as input and the target year as ground truth
+  • Runs the model and visualizes outputs
 
 Example:
     python -m transformer_cnn_model.plot_input_output \
         --year 2018 \
-        --reach 3 \
+        --reach 1 \
         --split testing \
         --epoch 18 \
+        --save
+
+Prediction/Target only (skip input sequence; recommended when T is large, e.g. 9):
+    python -m transformer_cnn_model.plot_input_output \
+        --year 2018 \
+        --reach 1 \
+        --split testing \
+        --epoch 18 \
+        --pred-only \
         --save
 
 
@@ -50,10 +59,12 @@ Example:
 ----------------------------------------------------------------------
 CHECKPOINT SELECTION
 ----------------------------------------------------------------------
-By default, the script loads the latest checkpoint found in:
+By default the script loads the latest checkpoint found in:
 
     eval_cfg.checkpoint_dir
+
 matching:
+
     eval_cfg.checkpoint_pattern
 
 You may load a specific epoch with:
@@ -68,7 +79,8 @@ If --save is specified, figures are written to:
 
     data_cfg.plots_dir
 
-Otherwise, figures are displayed interactively.
+If --pred-only is used, the saved file name gets a "_predonly" suffix
+to avoid overwriting the full-layout plot.
 """
 
 from pathlib import Path
@@ -80,6 +92,8 @@ import re
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+from matplotlib.colors import ListedColormap
 
 from transformer_cnn_model.model_architecture import TransformerUNet
 from model.st_unet.st_unet import UNet3D
@@ -92,7 +106,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 # ---------------------------------------------------------
-# Checkpoint resolution (same logic)
+# Checkpoint resolution
 # ---------------------------------------------------------
 def resolve_checkpoint(epoch: Optional[int]) -> Path:
     ckpt_dir = Path(eval_cfg.checkpoint_dir)
@@ -117,6 +131,7 @@ def resolve_checkpoint(epoch: Optional[int]) -> Path:
 # Build model given T and checkpoint
 # ---------------------------------------------------------
 def build_model(device: torch.device, T: int, ckpt_path: Path) -> torch.nn.Module:
+    """Construct the model (from config) with n_channels = T and load weights."""
     model_type = model_cfg.architecture
 
     if model_type == "transunet":
@@ -169,6 +184,7 @@ def build_model(device: torch.device, T: int, ckpt_path: Path) -> torch.nn.Modul
             drop_channels=model_cfg.drop_channels,
             p_drop=model_cfg.p_drop,
         )
+
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -192,7 +208,16 @@ def build_sequence_for_target_year(
     year_target: int,
     nodata_value: int = -1,
 ) -> tuple[np.ndarray, np.ndarray]:
-    # Infer month from data_cfg.dir_folders (expects 'dataset_month3' etc.)
+    """
+    Build input sequence (T = year_target-1) and target image for a specific
+    (split, reach, target_year).
+
+    Uses:
+      - data_cfg.dir_folders as the dataset_monthX directory
+      - naming pattern:
+        '{year}_{MM}_01_{split}_r{reach}.tif'
+      - load_image_array + load_avg to fill nodata.
+    """
     m = re.search(r"dataset_month(\d+)", str(data_cfg.dir_folders))
     if m:
         month = int(m.group(1))
@@ -229,13 +254,9 @@ def build_sequence_for_target_year(
 
 
 # ---------------------------------------------------------
-# Plot helper
+# Plotting
 # ---------------------------------------------------------
-def _imshow(ax, img2d: np.ndarray, title: str, vmin=None, vmax=None):
-    im = ax.imshow(img2d, vmin=vmin, vmax=vmax)
-    ax.set_title(title)
-    ax.axis("off")
-    return im
+_GREY_WHITE = ListedColormap([(0.6, 0.6, 0.6), (1.0, 1.0, 1.0)])
 
 
 def plot_inputs_pred_target(
@@ -246,93 +267,82 @@ def plot_inputs_pred_target(
     save_path: Optional[Path],
     title: str,
 ):
-    import matplotlib.lines as mlines
-    from matplotlib.colors import ListedColormap
-    import numpy as np
-    import matplotlib.pyplot as plt
-
+    """
+    Full layout for T=4 only:
+      Row 1: 4 input frames
+      Gap band: bracket + label
+      Row 2: Prediction + Target
+    """
     T = inputs_np.shape[0]
-    assert T == 4, "This layout assumes exactly 4 input images."
+    if T != 4:
+        raise ValueError(
+            f"plot_inputs_pred_target expects T=4, got T={T}. "
+            "Use --pred-only to skip plotting inputs for large T."
+        )
 
-    # Binary prediction
     pred_bin = (pred_probs_np >= threshold).astype(np.float32)
-
-    # Grey for 0 (no water), white for 1 (water)
-    grey_white = ListedColormap([(0.6, 0.6, 0.6), (1.0, 1.0, 1.0)])
 
     fig = plt.figure(figsize=(14, 9))
 
-    # -------------------------
-    # Layout parameters (tune if needed)
-    # -------------------------
+    # ----- spacing / layout params (figure fraction) -----
+    # Title
+    fig.suptitle(title, x=0.5, y=0.985, ha="center", fontsize=22)
+
+    # Margins
     left_margin = 0.06
     right_margin = 0.06
 
-    # Title position
-    fig.suptitle(title, x=0.5, y=0.985, ha="center", fontsize=22)
-
-    # Row geometry
+    # Rows
     inputs_row_h = 0.34
     bottom_row_h = 0.38
+    gap_band_h = 0.10
+    label_to_bottom_gap = 0.06
 
-    # Make an explicit "gap band" between rows for bracket + label
-    gap_band_h = 0.1
-    label_to_bottom_gap = 0.06   # NEW: empty space between label and prediction row
-
-
-    # Y positions
+    # Vertical placement (you may tune inputs_row_y0 if needed)
     inputs_row_y0 = 0.54
     gap_band_y0 = inputs_row_y0 - gap_band_h
     bottom_row_y0 = gap_band_y0 - label_to_bottom_gap - bottom_row_h
 
-
-    # Input grouping: tight
+    # Inputs row: tight grouping
     gap_x_inputs = 0.012
     inputs_group_x0 = left_margin
     inputs_group_x1 = 1.0 - right_margin
     inputs_group_w = inputs_group_x1 - inputs_group_x0
     input_w = (inputs_group_w - 3 * gap_x_inputs) / 4.0
 
-    # Bottom grouping: prediction + target centered under inputs
+    # Bottom row: centered under inputs group
     bottom_panel_w = 0.23
     gap_x_bottom = 0.05
     bottom_group_w = 2 * bottom_panel_w + gap_x_bottom
     center_x = (inputs_group_x0 + inputs_group_x1) / 2.0
     bottom_group_x0 = center_x - bottom_group_w / 2.0
 
-    # -------------------------
-    # Row 1: input images
-    # -------------------------
+    # ----- Row 1: inputs -----
     input_axes = []
     for i in range(4):
         x0 = inputs_group_x0 + i * (input_w + gap_x_inputs)
         ax = fig.add_axes([x0, inputs_row_y0, input_w, inputs_row_h])
-        ax.imshow(inputs_np[i], cmap=grey_white, vmin=0.0, vmax=1.0, interpolation="nearest")
+        ax.imshow(inputs_np[i], cmap=_GREY_WHITE, vmin=0.0, vmax=1.0, interpolation="nearest")
         ax.set_title(f"Input t={i}", fontsize=16, pad=10)
         ax.axis("off")
         input_axes.append(ax)
 
-    # -------------------------
-    # Row 2: Prediction + Target
-    # -------------------------
+    # ----- Row 2: Prediction + Target -----
     ax_pred = fig.add_axes([bottom_group_x0, bottom_row_y0, bottom_panel_w, bottom_row_h])
     ax_tgt  = fig.add_axes([bottom_group_x0 + bottom_panel_w + gap_x_bottom, bottom_row_y0, bottom_panel_w, bottom_row_h])
 
-    ax_pred.imshow(pred_bin, cmap=grey_white, vmin=0.0, vmax=1.0, interpolation="nearest")
+    ax_pred.imshow(pred_bin, cmap=_GREY_WHITE, vmin=0.0, vmax=1.0, interpolation="nearest")
     ax_pred.set_title("Prediction", fontsize=18, pad=10)
     ax_pred.axis("off")
 
-    ax_tgt.imshow(target_np, cmap=grey_white, vmin=0.0, vmax=1.0, interpolation="nearest")
+    ax_tgt.imshow(target_np, cmap=_GREY_WHITE, vmin=0.0, vmax=1.0, interpolation="nearest")
     ax_tgt.set_title("Target", fontsize=18, pad=10)
     ax_tgt.axis("off")
 
-    # -------------------------
-    # Bracket + label in the GAP BAND (separate line)
-    # -------------------------
+    # ----- Bracket + label in gap band -----
     left = input_axes[0].get_position().x0
     right = input_axes[-1].get_position().x1
 
-    # Place bracket high in the gap band so it doesn't clash with bottom titles
     bracket_y = gap_band_y0 + 0.07
     tick = 0.018
 
@@ -343,14 +353,11 @@ def plot_inputs_pred_target(
     fig.add_artist(mlines.Line2D([right, right], [bracket_y, bracket_y + tick],
                                  transform=fig.transFigure, lw=2.2, color="black"))
 
-    # Label under bracket, still inside the gap band (and NOT near Prediction/Target titles)
     label_y = bracket_y - 0.03
     fig.text((left + right) / 2.0, label_y, "Input sequence",
              ha="center", va="top", fontsize=18)
 
-    # -------------------------
-    # Save / show
-    # -------------------------
+    # ----- Save/show -----
     if save_path:
         save_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
@@ -361,34 +368,84 @@ def plot_inputs_pred_target(
     plt.close(fig)
 
 
+def plot_pred_target_only(
+    pred_probs_np: np.ndarray, # (H,W)
+    target_np: np.ndarray,     # (H,W)
+    threshold: float,
+    save_path: Optional[Path],
+    title: str,
+):
+    """Compact plot: Prediction + Target only (no input sequence)."""
+    pred_bin = (pred_probs_np >= threshold).astype(np.float32)
+
+    fig = plt.figure(figsize=(10, 6))
+    fig.suptitle(title, x=0.5, y=0.98, ha="center", fontsize=20)
+
+    # Manual axes (stable spacing)
+    ax_pred = fig.add_axes([0.08, 0.12, 0.40, 0.72])
+    ax_tgt  = fig.add_axes([0.52, 0.12, 0.40, 0.72])
+
+    ax_pred.imshow(pred_bin, cmap=_GREY_WHITE, vmin=0.0, vmax=1.0, interpolation="nearest")
+    ax_pred.set_title("Prediction", fontsize=18, pad=10)
+    ax_pred.axis("off")
+
+    ax_tgt.imshow(target_np, cmap=_GREY_WHITE, vmin=0.0, vmax=1.0, interpolation="nearest")
+    ax_tgt.set_title("Target", fontsize=18, pad=10)
+    ax_tgt.axis("off")
+
+    if save_path:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"[INFO] Saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
 
 # ---------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Plot input sequence + prediction + target (year-based or sample-based)."
+        description="Plot inputs + prediction + target (or prediction+target only)."
     )
 
-    parser.add_argument("--epoch", type=int, default=None,
-                        help="Epoch checkpoint to load; else latest.")
-    parser.add_argument("--year", type=int, default=None,
-                        help="Target year (activates year-based mode).")
-    parser.add_argument("--reach", type=int, default=None,
-                        help="Reach ID (required if --year is used).")
-    parser.add_argument("--split", type=str, default="testing",
-                        choices=["training", "validation", "testing"],
-                        help="Dataset split (year-based mode).")
+    parser.add_argument(
+        "--epoch",
+        type=int,
+        default=None,
+        help="Epoch whose checkpoint should be loaded. If omitted, loads the latest checkpoint.",
+    )
 
-    parser.add_argument("--sample", type=int, default=0,
-                        help="Test sample index (used if --year not given).")
+    # Year-based selection
+    parser.add_argument("--year", type=int, default=None, help="Target year (activates year-based mode).")
+    parser.add_argument("--reach", type=int, default=None, help="Reach ID (required if --year is used).")
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="testing",
+        choices=["training", "validation", "testing"],
+        help="Dataset split for year-based mode (default: testing).",
+    )
 
-    parser.add_argument("--threshold", type=float, default=train_cfg.water_threshold,
-                        help=f"Water threshold (default {train_cfg.water_threshold}).")
+    # Sample-based selection
+    parser.add_argument("--sample", type=int, default=0, help="Test sample index (used if --year not given).")
 
-    parser.add_argument("--save", action="store_true",
-                        help="Save instead of display.")
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=train_cfg.water_threshold,
+        help=f"Water probability threshold (default: {train_cfg.water_threshold}).",
+    )
 
+    parser.add_argument(
+        "--pred-only",
+        action="store_true",
+        help="Plot only Prediction and Target (skip input sequence). Useful when T is large.",
+    )
+
+    parser.add_argument("--save", action="store_true", help="Save output instead of displaying it.")
     return parser.parse_args()
 
 
@@ -419,39 +476,49 @@ def main():
             nodata_value=-1,
         )
 
-        # input_np: (T,H,W)  -> tensor: (1,T,H,W)
+        # (1, T, H, W)
         x = torch.tensor(input_np, dtype=torch.float32).unsqueeze(0).to(device)
 
         T = x.shape[1]
         model = build_model(device, T, ckpt_path)
 
         with torch.no_grad():
-            pred = model(x)  # (1,1,H,W) or (1,H,W) depending on model
-        pred = pred.squeeze().detach().cpu().numpy()  # (H,W)
+            pred = model(x)
+        pred = pred.squeeze().detach().cpu().numpy()  # (H, W) (after squeeze)
 
         title = f"Prediction – year {args.year}, reach {args.reach}, split {args.split} ({model_type})"
 
         if args.save:
-            out_name = f"prediction_year{args.year}_reach{args.reach}_{args.split}_{model_type}.png"
+            suffix = "_predonly" if args.pred_only else ""
+            out_name = f"prediction_year{args.year}_reach{args.reach}_{args.split}_{model_type}{suffix}.png"
             out_path = data_cfg.plots_dir / out_name
         else:
             out_path = None
 
-        plot_inputs_pred_target(
-            inputs_np=input_np,
-            pred_probs_np=pred,
-            target_np=target_np,
-            threshold=threshold,
-            save_path=out_path,
-            title=title,
-        )
+        if args.pred_only:
+            plot_pred_target_only(
+                pred_probs_np=pred,
+                target_np=target_np,
+                threshold=threshold,
+                save_path=out_path,
+                title=title,
+            )
+        else:
+            plot_inputs_pred_target(
+                inputs_np=input_np,
+                pred_probs_np=pred,
+                target_np=target_np,
+                threshold=threshold,
+                save_path=out_path,
+                title=title,
+            )
         return
 
     # -------- SAMPLE-BASED MODE --------
     print("[INFO] Sample-based mode (no --year provided).")
     sample_idx = args.sample
 
-    train_loader, val_loader, test_loader = build_dataloaders(
+    _, _, test_loader = build_dataloaders(
         batch_size=data_cfg.batch_size,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
@@ -462,7 +529,7 @@ def main():
         cache_dir=data_cfg.cache_dir,
     )
 
-    # infer T from test loader
+    # infer T from loader
     x_sample, _ = next(iter(test_loader))
     _, T, _, _ = x_sample.shape
     print(f"[INFO] Detected T = {T} from test_loader")
@@ -473,31 +540,40 @@ def main():
     if sample_idx < 0 or sample_idx >= len(test_dataset):
         raise ValueError(f"sample_idx {sample_idx} out of range (0–{len(test_dataset)-1})")
 
-    x, y = test_dataset[sample_idx]   # x: (T,H,W), y: (H,W)
-    x = x.unsqueeze(0).to(device)     # (1,T,H,W)
+    x, y = test_dataset[sample_idx]     # x: (T,H,W), y: (H,W)
+    x = x.unsqueeze(0).to(device)       # (1,T,H,W)
     y_np = y.detach().cpu().numpy() if torch.is_tensor(y) else np.asarray(y)
 
     with torch.no_grad():
         pred = model(x)
-
     pred = pred.squeeze().detach().cpu().numpy()  # (H,W)
 
     title = f"Prediction – sample {sample_idx:03d} ({model_type})"
 
     if args.save:
-        out_name = f"prediction_sample{sample_idx:03d}_{model_type}.png"
+        suffix = "_predonly" if args.pred_only else ""
+        out_name = f"prediction_sample{sample_idx:03d}_{model_type}{suffix}.png"
         out_path = data_cfg.plots_dir / out_name
     else:
         out_path = None
 
-    plot_inputs_pred_target(
-        inputs_np=x.squeeze(0).detach().cpu().numpy(),  # (T,H,W)
-        pred_probs_np=pred,
-        target_np=y_np,
-        threshold=threshold,
-        save_path=out_path,
-        title=title,
-    )
+    if args.pred_only:
+        plot_pred_target_only(
+            pred_probs_np=pred,
+            target_np=y_np,
+            threshold=threshold,
+            save_path=out_path,
+            title=title,
+        )
+    else:
+        plot_inputs_pred_target(
+            inputs_np=x.squeeze(0).detach().cpu().numpy(),
+            pred_probs_np=pred,
+            target_np=y_np,
+            threshold=threshold,
+            save_path=out_path,
+            title=title,
+        )
 
 
 if __name__ == "__main__":
