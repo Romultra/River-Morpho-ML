@@ -3,6 +3,9 @@ training.py
 
 Script to train the TransformerUNet model using the dataset built in test/load_data.py
 and the training utilities from train_eval.py.
+
+Example usage:
+    python -m transformer_cnn_model.train
 """
 
 import os
