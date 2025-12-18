@@ -62,11 +62,11 @@ Furthermore, we state that the models investigated in this report should not be 
 \section{Introduction} \label{section: Introduction}
 Deep-learning approaches based on convolutional neural networks (CNNs) have recently shown promise in predicting morphological evolution from satellite imagery, as demonstrated in the JamUNet model predictions for the Brahmaputra River \cite{magherini2024jamunet}. However, CNNs inherently encode spatial inductive biases: they learn local spatial patterns through translation-equivariant filters but lack any inductive bias for temporal evolution. This limitation leads the model to capture short-term or local morphological changes but to fail to reproduce temporal patterns, particularly year-to-year dynamics such as progressive bar migration or cumulative erosion. As the morphology of large braided rivers, such as the Brahmaputra, results from complex, path-dependent sequences of events, the absence of temporal bias means that a spatial-only CNN cannot leverage information about how the system evolves over time. \\
 \\
-This motivates the use of architectures that explicitly incorporate temporal modelling, such as Transformer encoders, which can learn long-range dependencies and sequence relationships across multiple years of satellite observations. By combining a Transformer (to capture temporal dynamics) with a CNN (to extract rich spatial features), hybrid models aim to overcome the core limitation identified in the JamUNet model and produce predictions that more faithfully reflect the river’s spatio-temporal evolution. We justify in Model architecture section \ref{section: Model architecture} the rationale behind the design of each hybrid model. \textcolor{red}{May need to change wording here of "hybrid models"}
+This motivates the use of architectures that explicitly incorporate temporal modelling, such as Transformer encoders, which can learn long-range dependencies and sequence relationships across multiple years of satellite observations. We investigate two distinct approaches: a hybrid model (TransUNet) that combines a Transformer for temporal dynamics with a CNN for spatial features, and a full transformer model (st-Swin-UNet) that replaces the entire CNN backbone with hierarchical window-based attention. These architectures aim to overcome the core limitation identified in the JamUNet model and produce predictions that more faithfully reflect the river's spatio-temporal evolution. We justify in Model architecture section \ref{section: Model architecture} the rationale behind the design of each model.
 
 
 \section{Model architecture} \label{section: Model architecture}
-The JamUNet architecture has been described and depicted in Section 3.2 and Figure 3.5 of \cite{magherini2024jamunet}. Let us now describe the hybrid models developed TransUNet and \textcolor{red}{MODEL?} and how they differ from the JamUNet architecture. 
+The JamUNet architecture has been described and depicted in Section 3.2 and Figure 3.5 of \cite{magherini2024jamunet}. Let us now describe the transformer-based models TransUNet and st-Swin-UNet and how they differ from the JamUNet architecture. 
 
 \subsection{TransUNet}
 The TransUNet hybrid model incorporates a temporal transformer block before the U-Net encoder to explicitly model temporal dependencies that the standard JamUNet model cannot capture. This approach of using a temporal transformer to encode time information before input into a spatial model is also used by researchers investigating traffic flow forecasting \cite{ma2024spatial}. Although the time domain of traffic flow forecasting is much shorter than that of river morphology prediction, both fields share a reliance on a combination of long-range temporal dependencies and local spatial structure in multi-frame spatio-temporal data. The structure of the spatio-temporal model for traffic flow forecasting \cite{ma2024spatial} comprises a temporal transformer followed by a spatial transformer (see Figure 1 of the research paper \cite{ma2024spatial}). Unlike the abovementioned research paper, it was decided that TransUNet would not implement a spatial transformer after the temporal transformer, but would instead retain the majority of the JamUNet structure, given the already decent results of the JamUNet architecture. \\
@@ -108,6 +108,52 @@ The temporally contextualised tensor created by the temporal transformer block i
 \end{figure}
 \noindent To summarise, compared to the standard JamUNet model, which uses fixed local 3D convolutions with shallow temporal receptive fields, the transformer is expected to learn long-range, nonlinear temporal dependencies, is not limited by kernel size, and does not assume that temporal changes are spatially local or stationary across the image. The TransUNet hybrid architecture is therefore devised in the hopes that it can predict long-term processes such as bar migration, channel shifting, and progressive erosion, something which the standard JamUNet is not able to do.
 
+\subsection{st-Swin-UNet}
+While TransUNet introduces explicit temporal modelling through per-pixel transformers, it faces a fundamental computational challenge: processing each pixel's temporal sequence independently results in very large sequence counts ($H \times W$ sequences of length $T$), requiring chunked processing to avoid memory overflow. This motivates the investigation of window-based self-attention mechanisms, specifically the Swin Transformer architecture \cite{liu2021swin}, which has demonstrated strong performance in hierarchical vision tasks while maintaining computational efficiency through localised attention windows. \\
+\\
+The st-Swin-UNet (spatio-temporal Swin-UNet) model replaces the entire JamUNet CNN backbone with a Swin Transformer-based U-Net architecture. Unlike TransUNet, which applies transformers only to the temporal dimension before feeding into a spatial CNN, st-Swin-UNet employs window-based self-attention for both spatial feature extraction and implicit spatio-temporal modelling. This design choice is inspired by recent video understanding architectures \cite{liu2022video}, which show that windowed attention mechanisms can efficiently process spatio-temporal data. \\
+\\
+The architecture begins with a spatio-temporal patch embedding module that processes the input sequence $x \in \mathbb{R}^{B \times T \times H \times W}$. Each temporal frame is embedded separately using a shared convolutional projection layer (patch size $4 \times 4$), producing spatial patches. Crucially, learnable temporal position embeddings are then added to each frame's patch embeddings before temporal aggregation. These temporal position embeddings allow the model to distinguish between different years in the input sequence and learn their relative importance for prediction. The temporal frames are aggregated using a \textit{concat-proj} strategy: all frame embeddings are concatenated and projected back to the target dimension through a two-layer MLP, providing an expressive temporal fusion mechanism. \\
+\\
+Following patch embedding, st-Swin-UNet employs a symmetric encoder-decoder architecture with four hierarchical stages. The encoder progressively downsamples spatial resolution (by factors of 2, 4, 8, 16) while increasing feature dimensionality, using torchvision's \texttt{SwinTransformerBlock} and \texttt{PatchMerging} modules. Each stage contains multiple Swin Transformer blocks with window-based self-attention (window size $8 \times 8$ for tiny variant). Unlike global self-attention, which has quadratic complexity $\mathcal{O}((HW)^2)$, window-based attention computes attention only within non-overlapping local windows, reducing complexity to $\mathcal{O}(HW)$ and making the approach tractable for our $1000 \times 500$ images. Shifted window partitioning between consecutive blocks enables cross-window connections while maintaining efficiency. \\
+\\
+The decoder mirrors the encoder structure, progressively upsampling features through custom \texttt{PatchExpanding} layers (the inverse operation of \texttt{PatchMerging}) and concatenating skip connections from corresponding encoder stages. This U-Net structure with skip connections preserves fine-grained spatial details lost during downsampling, which is critical for accurate pixel-level segmentation of narrow river channels. A final head consisting of two transposed convolutions upsamples the output to the original resolution and produces the binary prediction. A block diagram of the st-Swin-UNet architecture is shown in Figure \ref{fig: StSwinUNet block diagram}.
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=1.0cm,
+        >=Latex,
+        block/.style={
+            rectangle,
+            draw,
+            rounded corners,
+            minimum width=2.0cm,
+            minimum height=1.0cm,
+            align=center
+        }
+    ]
+
+    % Nodes
+    \node[block] (input) {Input\\$x \in \mathbb{R}^{B \times T \times H \times W}$};
+    \node[block, right=of input] (patch) {Spatio-Temporal\\Patch Embed};
+    \node[block, right=of patch] (encoder) {Swin\\Encoder\\(4 stages)};
+    \node[block, right=of encoder] (decoder) {Swin\\Decoder\\(skip connections)};
+    \node[block, right=of decoder] (final output) {Predicted\\morphology\\$y \in \mathbb{R}^{B \times H \times W}$};
+
+    % Arrows
+    \draw[->] (input) -- (patch);
+    \draw[->] (patch) -- (encoder);
+    \draw[->] (encoder) -- (decoder);
+    \draw[->] (decoder) -- (final output);
+
+    \end{tikzpicture}
+    \caption{st-Swin-UNet architecture}
+    \label{fig: StSwinUNet block diagram}
+\end{figure}
+\noindent Two model variants were developed: the \textit{tiny} variant (embedding dimension 48, depths [2,2,2,2], $\sim$6.8M parameters) and the \textit{small} variant (embedding dimension 96, depths [2,2,6,2], $\sim$11M parameters). Despite the larger parameter count compared to TransUNet and JamUNet ($\sim$500K), window-based attention makes st-Swin-UNet more memory-efficient than per-pixel temporal transformers, requiring 8--10 GB GPU memory with batch size 8 for the tiny variant. \\
+\\
+To summarise, st-Swin-UNet differs fundamentally from both JamUNet and TransUNet. Unlike JamUNet's shallow 3D convolutions with fixed local receptive fields, st-Swin-UNet employs hierarchical window-based attention that can model both spatial features and temporal patterns through learned position embeddings. Unlike TransUNet's per-pixel temporal attention followed by CNN, st-Swin-UNet replaces the entire backbone with transformers, using window-based attention to achieve computational tractability. The architecture is expected to benefit from the hierarchical feature extraction and global receptive field of transformers while avoiding the memory bottlenecks of global attention, potentially improving predictions of complex morphological patterns spanning multiple spatial scales.
+
 
 \section{Model comparison} \label{section: Model comparison}
 \textcolor{red}{Mention the hyperparameters of the model used in comparison} \\
@@ -148,7 +194,7 @@ TALK ABOUT COMPARING WITH 9 YEAR MODELS IN APPENDIX \\
 TALK ABOUT HOW TRAINING IS DOMINATED BY CNN AND TRANSFORMER MAY NOT BE FULLY USED TO POTENTIAL (MUCH MORE DATA NEEDED) \\
 TALK ABOUT HOW BRAIDED RIVERS ARE HARD TO PREDICT AND GIVE EXAMPLE OF DISAPPEARING SMALL RIVER ON LEFT OF SOME IMAGES (ABRUPT CHANGE) \\
 }
-Neither TransUNet nor \textcolor{red}{MODEL} yields noticeable improvements over the JamUNet model. The main possible reasons for this are listed below:
+Neither TransUNet nor st-Swin-UNet yields noticeable improvements over the JamUNet model. The main possible reasons for this are listed below:
 \begin{itemize}
     \item There is insufficient annual data to leverage the transformer fully. We used the same training data as in \cite{magherini2024jamunet}, i.e., approximately $700$ images spanning $30$ years, each with $1000 \times 500$ pixels, which may not be sufficient for a transformer to perform well. For small datasets, the TransUNet training process may be dominated by the CNN component, with the transformer component serving a minimal role. It is even possible that transformer models hinders the prediction accuracy compared to CNNs for small datasets \cite{akkaya2024enhancing}.
     \item Braided rivers are inherently hard to predict, and this difficulty is compounded by the fact that we were only able to use a limited time period each year (January to April) for input satellite images due to cloud cover in other months. As braided rivers can change substantially over time, even on the timescale of a year, due to flood seasons (June to September for the Brahmaputra River), the lack of data in the other months could significantly hinder the accuracy of any machine learning model.
