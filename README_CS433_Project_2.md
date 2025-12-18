@@ -1,11 +1,29 @@
-# River Morphological CHanges Prediction (EPFL Fall 2025)
+# River Morphological Changes Prediction (EPFL Fall 2025)
+
+---
+
+<table>
+  <tr>
+    <td>
+      <img src="./images/1994-01-25.png" width="000" alt="Brahmaputra-Jamuna River">
+    </td>
+    <td valign="bottom" style="text-align:left;">
+      <em>
+        The image represents the Brahmaputra-Jamuna River at the border between India and Bangladesh. 
+        The image was taken on January 25, 1994. It was retrieved from 
+        <a href="https://earthengine.google.com/">Google Earth Engine</a> 
+        <a href="https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LT05_C02_T1_L2">USGS Landsat 5 collection</a>.
+      </em>
+    </td>
+  </tr>
+</table>
 
 ---
 
 ## Project overview
 This project implements a **machine learning pipeline** to predict the **morphological changes in the Brahmaputra-Jamuna River** using **satellite image analysis**. The images are extracted from the **[Global Surface Water Dataset (GSWD)](https://global-surface-water.appspot.com/download)** introduced by **[Pekel et al. (2016)](https://doi.org/10.1038/nature20584)**. 
 
-The project aims to improve the **[JamUNet model](https://github.com/antoniomagherini/jamunet-morpho-braided)** developed by **[A. Magherini](https://people.epfl.ch/antonio.magherini)** by integrating a **transformer-based architecture** to better capture long-range spatial and temporal dependencies in braided river morphology.
+The project aims to improve the **[JamUNet model](https://github.com/antoniomagherini/jamunet-morpho-braided)** developed by **[A. Magherini](https://people.epfl.ch/antonio.magherini)** by integrating a **transformer-based architecture** to better capture temporal dependencies in braided river morphology.
 
 For details on the original JamUNet model, please refer to [A. Magherini (2024)](https://repository.tudelft.nl/record/uuid:38ea0798-dd3d-4be2-b937-b80621957348) : *JamUNet : predicting the morphological changes of braided sand-bed rivers with deep learning*.
 
@@ -19,32 +37,22 @@ This project was developed by :
 ---
 
 ### Acknowledgments
-Our work is built on the foundational work of **A. Magherini**, whose **JamUNet model** provided the basis for this project. We are grateful for his contributions and guidance.
+This project is built on the foundational work of **A. Magherini**, whose **JamUNet model** provided the basis for this project. We are grateful for his contributions and guidance.
 
 ---
+## Repository structure
 
-<table>
-  <tr>
-    <td>
-      <img src=".\images\1994-01-25.png" width="1000" alt="Brahmaputra-Jamuna River">
-    </td>
-    <td>
-      <p style="font-size: 16px;">
-        This repository stores the data, code, and other files necessary for the completion of the Master's thesis of <a href="https://nl.linkedin.com/in/antonio-magherini-4349b2229">Antonio Magherini</a>, student of the MSc Civil Engineering program - Hydraulic Engineering track, with a specialisation in River Engineering 
-        at the <a href="https://www.tudelft.nl/citg">Faculty of Civil Engineering and Geosciences</a> of Delft University of Technology (TU Delft).
-      </p>
-      <p style="font-size: 16px;">
-        The thesis was carried out in collaboration with <a href="https://www.deltares.nl/en">Deltares</a>. The manuscript can be found at <a href="https://repository.tudelft.nl/record/uuid:38ea0798-dd3d-4be2-b937-b80621957348">TU Delft repository</a>.
-      </p>
-      <p style="font-size: 16px;">
-        For any information, feel free to contact the author at: <a href="mailto:antonio.magherini@gmail.com"><em>antonio.magherini@gmail.com</em></a>.
-      </p>
-      <p style="margin-top: 100px;">
-        <em>The image represents the Brahmaputra-Jamuna River at the border between India and Bangladesh. The image was taken on January 25, 1994. It was retrieved from <a href="https://earthengine.google.com/">Google Earth Engine</a> <a href="https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LT05_C02_T1_L2">USGS Landsat 5 collection</a>.</em>
-      </p>
-    </td>
-  </tr>
-</table>
+The structure of this repository is the following:
+- <code>benchmarks</code>, contains modules and notebooks of the benchmark models used for comparison;
+- <code>data</code>, contains raw data (satellite images, river variables);
+- <code>images</code>, contains the images shown in the thesis report and other documents; (to be added soon)
+- <code>model</code>, contains the modules and noteboooks with the JamUNet deep-learning model;
+- <code>other</code>, contains documents, images, and other files used during the project;
+- <code>postprocessing</code>, contains the modules used for the data postprocessing;
+- <code>preliminary</code>, contains the notebooks with the preliminary data analysis, satellite image visualization, preprocessing steps, and other examples;
+- <code>preprocessing</code>, contains the modules used for the data preprocessing.
+- <code>swin-unet</code>, contains Swin-Unet deep learning model with accompanying modules and notebooks;
+- <code>transformer_cnn_model</code>, contains Transformer-CNN deep learning model with accompanying modules and notebooks.
 
 ---
 
@@ -57,18 +65,14 @@ For detailed information about this repository:
 
 ---
 
-## Repository structure
+## Requirements
+External libraries are required to run code. To install them, run in command line:
 
-The structure of this repository is the following:
-- <code>benchmarks</code>, contains modules and notebooks of the benchmark models used for comparison;
-- <code>data</code>, contains raw data (satellite images, river variables);
-- <code>images</code>, contains the images shown in the thesis report and other documents; (to be added soon)
-- <code>model</code>, contains the modules and noteboooks with the deep-learning model;
-- <code>other</code>, contains documents, images, and other files used during the project;
-- <code>postprocessing</code>, contains the modules used for the data postprocessing;
-- <code>preliminary</code>, contains the notebooks with the preliminary data analysis, satellite image visualization, preprocessing steps, and other examples;
-- <code>preprocessing</code>, contains the modules used for the data preprocessing.
-
+```bash
+python -m venv .venv
+source .venv/bin/activate     
+pip install -r requirements.txt
+```
 ---
 
 ## Install dependencies
@@ -86,9 +90,22 @@ To activate the environment follow these steps:
 
 ---
 
+## Transformer_CNN model
+To run the Transformer_CNN model, inside the <code>transformer_cnn_model</code> folder:
+- In <code>config</code>, select the model's architecture and parameters;
+- In <code>train_eval</code>, choose the loss function and physical parameters for binary classification;
+- Run <code>train</code>. 
+
+---
+
+## Swin-UNet model
+To run the Swin-UNet model, please follow step by step the README in the <code>swin-unet</code> folder.
+
+---
+
 ## Cite
 
-Please cite the [Master thesis](https://repository.tudelft.nl/record/uuid:38ea0798-dd3d-4be2-b937-b80621957348) as:
+Please cite [A. Magherini's Master thesis](https://repository.tudelft.nl/record/uuid:38ea0798-dd3d-4be2-b937-b80621957348) as:
 
 ```
 @mastersthesis{magherini2024,
@@ -99,12 +116,3 @@ year = {2024},
 month = {10},
 howpublished = {\url{https://repository.tudelft.nl/record/uuid:38ea0798-dd3d-4be2-b937-b80621957348}}
 }
-```
-<!-- 
-<p align="center" style="margin-top: 1px;"> 
-    <img src=".\images\1994-01-25.png" width="400"> 
-</p>
-
-<p align="center">
-    <em>Brahmaputra-Jamuna River at the border between India and Bangladesh. The image was retrieved<br>from <a href="https://earthengine.google.com/">Google Earth Engine</a> <a href="https://developers.google.com/earth-engine/datasets/catalog/LANDSAT_LT05_C02_T1_L2">USGS Landsat 5 collection</a>. The image was taken on January 25, 1994.</em>
-</p> -->
