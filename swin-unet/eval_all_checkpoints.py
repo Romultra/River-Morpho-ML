@@ -1,9 +1,11 @@
 """
 eval_all_checkpoints.py
 
-Evaluate all st-Swin-UNet model checkpoints in a directory on the *test* dataset
-and save metrics (loss, acc, prec, rec, f1, csi) for each epoch into a single
-CSV file.
+Evaluate all st-Swin-UNet model checkpoints in a directory on the validation or test dataset
+and save metrics (loss, acc, prec, rec, f1, csi) for each epoch into a single CSV file.
+
+IMPORTANT: For proper methodology, evaluate on VALIDATION set to select best checkpoint,
+then evaluate that checkpoint ONCE on test set using final_test_eval.py
 
 Adapted from transformer_cnn_model/eval_all_checkpoints.py for st-Swin-UNet.
 
@@ -11,14 +13,11 @@ Usage example (from repo root)
 ------------------------------
     conda activate braided
 
-    # Use all defaults from config.py
-    python -m swin-unet.eval_all_checkpoints
+    # Evaluate on VALIDATION set (recommended for model selection)
+    python -m swin-unet.eval_all_checkpoints --split val
 
-    # Or override some options from the command line
-    python -m swin-unet.eval_all_checkpoints \
-        --checkpoint-dir swin-unet/checkpoints \
-        --checkpoint-pattern "stswin_tiny_epoch*.pt" \
-        --output-csv swin-unet/scores/test_metrics_all_epochs_stswin_tiny.csv
+    # Or evaluate on test set (only for final reporting)
+    python -m swin-unet.eval_all_checkpoints --split test
 
 Command-line options
 --------------------
@@ -135,6 +134,21 @@ def parse_args():
         help="Temporal aggregation method "
              f"(default: {model_cfg.temporal_aggregation}).",
     )
+    parser.add_argument(
+        "--temporal-frames",
+        type=int,
+        default=data_cfg.temporal_frames,
+        choices=[4, 9],
+        help=f"Number of input temporal frames: 4 or 9 years (default: {data_cfg.temporal_frames})",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="val",
+        choices=["val", "test"],
+        help="Dataset split to evaluate on: 'val' for validation (recommended for model selection), "
+             "'test' for final evaluation (default: val)",
+    )
     return parser.parse_args()
 
 
@@ -179,8 +193,12 @@ def create_model(variant: str, temporal_aggregation: str, in_chans: int):
 def main():
     args = parse_args()
 
-    # Update eval config for the specified variant
-    eval_cfg.update_for_variant(args.variant)
+    # Update data config with temporal frames
+    data_cfg.temporal_frames = args.temporal_frames
+    data_cfg.year_target = args.temporal_frames + 1
+
+    # Update eval config for the specified variant and temporal frames
+    eval_cfg.update_for_variant(args.variant, args.temporal_frames)
 
     # Use variant-specific defaults if not specified
     if args.checkpoint_dir is None:
@@ -188,7 +206,10 @@ def main():
     if args.checkpoint_pattern is None:
         args.checkpoint_pattern = eval_cfg.checkpoint_pattern
     if args.output_csv is None:
-        args.output_csv = str(eval_cfg.scores_csv)
+        # Auto-generate CSV name based on split
+        model_id = f"{args.variant}_{args.temporal_frames}y"
+        scores_dir = Path("swin-unet/scores")
+        args.output_csv = str(scores_dir / f"{args.split}_metrics_all_epochs_stswin_{model_id}.csv")
 
     # -----------------------
     # 1. Find checkpoints
@@ -243,10 +264,18 @@ def main():
         cache_dir=cache_dir,
     )
 
-    # Peek at test loader to infer T (time steps)
-    x_sample, y_sample = next(iter(test_loader))
+    # Select loader based on split
+    if args.split == "val":
+        eval_loader = val_loader
+        split_name = "validation"
+    else:
+        eval_loader = test_loader
+        split_name = "test"
+
+    # Peek at loader to infer T (time steps)
+    x_sample, y_sample = next(iter(eval_loader))
     B, T, H, W = x_sample.shape
-    print(f"\nSample test batch shape: x={x_sample.shape}, y={y_sample.shape}")
+    print(f"\nSample {split_name} batch shape: x={x_sample.shape}, y={y_sample.shape}")
     print(f"Inferred T (time steps / input channels) = {T}")
 
     # -----------------------
@@ -269,10 +298,10 @@ def main():
     print(f"  Total parameters: {total_params:,}")
 
     # -----------------------
-    # 5. Evaluate each checkpoint on test set
+    # 5. Evaluate each checkpoint on selected split
     # -----------------------
     rows = []
-    print("\nEvaluating checkpoints on test set...")
+    print(f"\nEvaluating checkpoints on {split_name} set...")
 
     for ckpt_path in checkpoint_paths:
         epoch = extract_epoch_from_name(ckpt_path)
@@ -282,9 +311,9 @@ def main():
         model.load_state_dict(state_dict)
         model.eval()
 
-        test_losses, acc, prec, rec, f1, csi = validation_unet(
+        losses, acc, prec, rec, f1, csi = validation_unet(
             model,
-            test_loader,
+            eval_loader,
             nonwater=train_cfg.nonwater_label,
             water=train_cfg.water_label,
             device=str(device),
@@ -292,10 +321,10 @@ def main():
             water_threshold=train_cfg.water_threshold,
         )
 
-        mean_test_loss = float(torch.tensor(test_losses).mean())
+        mean_loss = float(torch.tensor(losses).mean())
 
         print(
-            f"Test loss={mean_test_loss:.6f}, "
+            f"{split_name.capitalize()} loss={mean_loss:.6f}, "
             f"acc={acc:.4f}, prec={prec:.4f}, rec={rec:.4f}, "
             f"f1={f1:.4f}, csi={csi:.4f}"
         )
@@ -303,12 +332,12 @@ def main():
         rows.append({
             "epoch": epoch,
             "checkpoint": ckpt_path.name,
-            "test_loss": mean_test_loss,
-            "test_acc": float(acc),
-            "test_prec": float(prec),
-            "test_rec": float(rec),
-            "test_f1": float(f1),
-            "test_csi": float(csi),
+            "loss": mean_loss,
+            "acc": float(acc),
+            "prec": float(prec),
+            "rec": float(rec),
+            "f1": float(f1),
+            "csi": float(csi),
         })
 
     # Sort again by epoch (just in case)
@@ -323,12 +352,12 @@ def main():
     fieldnames = [
         "epoch",
         "checkpoint",
-        "test_loss",
-        "test_acc",
-        "test_prec",
-        "test_rec",
-        "test_f1",
-        "test_csi",
+        "loss",
+        "acc",
+        "prec",
+        "rec",
+        "f1",
+        "csi",
     ]
 
     with open(out_path, "w", newline="") as f:
@@ -337,7 +366,7 @@ def main():
         for row in rows:
             writer.writerow(row)
 
-    print(f"\nSaved test metrics for {len(rows)} checkpoints to {out_path}")
+    print(f"\nSaved {split_name} metrics for {len(rows)} checkpoints to {out_path}")
 
 
 if __name__ == "__main__":

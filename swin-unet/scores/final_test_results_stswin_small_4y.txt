@@ -1,0 +1,16 @@
+st-Swin-UNet Final Test Results
+============================================================
+Model variant: small
+Temporal frames: 4
+Temporal aggregation: concat_proj
+
+Best checkpoint: epoch 14
+Selected by: validation f1 = 0.668218
+
+Test set performance (unbiased estimate):
+  Loss:      0.155250
+  Accuracy:  0.9286
+  Precision: 0.6708
+  Recall:    0.7417
+  F1 Score:  0.7044
+  CSI/IoU:   0.5438

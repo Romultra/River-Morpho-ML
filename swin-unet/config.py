@@ -8,7 +8,8 @@ from typing import Optional
 @dataclass
 class DataConfig:
     # Temporal setup
-    year_target: int = 5  # 4 input years + 1 target year (matches original thesis model)
+    temporal_frames: int = 4  # Number of input years (4 or 9)
+    year_target: int = 5  # Total sequence length: temporal_frames + 1 target year
 
     # Dataset paths
     dir_folders: str = "data/satellite/dataset_month3"
@@ -67,8 +68,8 @@ class TrainConfig:
     loss_f: str = "BCE"  # Options: "BCE", "BCE_Logits", "Focal"
     physics: bool = False  # Physics-based loss terms
 
-    # Checkpoint management (will be updated based on variant)
-    ckpt_dir: Path = Path("swin-unet/checkpoints_tiny")
+    # Checkpoint management (will be updated based on variant and temporal frames)
+    ckpt_dir: Path = Path("swin-unet/checkpoints_tiny_4y")
     save_every_n_epochs: int = 1
 
     # Learning rate scheduling (optional)
@@ -79,17 +80,18 @@ class TrainConfig:
 
 @dataclass
 class EvalConfig:
-    # These will be updated based on model variant
-    # Default to tiny, but should be updated when variant changes
-    checkpoint_pattern: str = "stswin_tiny_epoch*.pt"
-    checkpoint_dir: Path = Path("swin-unet/checkpoints_tiny")
-    scores_csv: Path = Path("swin-unet/scores/test_metrics_all_epochs_stswin_tiny.csv")
+    # These will be updated based on model variant and temporal frames
+    # Default to tiny with 4 temporal frames
+    checkpoint_pattern: str = "stswin_tiny_4y_epoch*.pt"
+    checkpoint_dir: Path = Path("swin-unet/checkpoints_tiny_4y")
+    scores_csv: Path = Path("swin-unet/scores/test_metrics_all_epochs_stswin_tiny_4y.csv")
 
-    def update_for_variant(self, variant: str):
-        """Update paths based on model variant."""
-        self.checkpoint_pattern = f"stswin_{variant}_epoch*.pt"
-        self.checkpoint_dir = Path(f"swin-unet/checkpoints_{variant}")
-        self.scores_csv = Path(f"swin-unet/scores/test_metrics_all_epochs_stswin_{variant}.csv")
+    def update_for_variant(self, variant: str, temporal_frames: int = 4):
+        """Update paths based on model variant and temporal configuration."""
+        model_id = f"{variant}_{temporal_frames}y"
+        self.checkpoint_pattern = f"stswin_{model_id}_epoch*.pt"
+        self.checkpoint_dir = Path(f"swin-unet/checkpoints_{model_id}")
+        self.scores_csv = Path(f"swin-unet/scores/test_metrics_all_epochs_stswin_{model_id}.csv")
 
 
 # Single global instances you can import everywhere

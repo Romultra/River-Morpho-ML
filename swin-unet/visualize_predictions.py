@@ -89,6 +89,13 @@ def parse_args():
         help="Temporal aggregation method (default: from config)",
     )
     parser.add_argument(
+        "--temporal-frames",
+        type=int,
+        default=data_cfg.temporal_frames,
+        choices=[4, 9],
+        help=f"Number of input temporal frames: 4 or 9 years (default: {data_cfg.temporal_frames})",
+    )
+    parser.add_argument(
         "--threshold",
         type=float,
         default=0.5,
@@ -232,6 +239,10 @@ def compute_metrics(target, prediction, threshold=0.5):
 def main():
     args = parse_args()
 
+    # Update data config with temporal frames
+    data_cfg.temporal_frames = args.temporal_frames
+    data_cfg.year_target = args.temporal_frames + 1
+
     # Device configuration
     if not args.cpu and torch.cuda.is_available():
         device = torch.device("cuda:0")
@@ -291,13 +302,17 @@ def main():
     print(f"Model loaded successfully")
     print(f"Total parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    # Create output directory
-    output_dir = Path(args.output_dir)
+    # Model identifier for directory organization
+    model_id = f"stswin_{args.variant}_{args.temporal_frames}y"
+
+    # Create model-specific output directory with predictions subfolder
+    output_dir = Path(args.output_dir) / model_id / "predictions"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Visualize predictions
     print(f"\nGenerating visualizations for {args.num_samples} samples...")
     print(f"Model variant: {args.variant}")
+    print(f"Temporal frames: {args.temporal_frames} input years + 1 target")
     print(f"Threshold: {args.threshold}")
     print(f"Output directory: {output_dir}")
 
@@ -331,8 +346,8 @@ def main():
             print(f"  F1: {metrics['f1']:.4f}")
             print(f"  IoU/CSI: {metrics['iou']:.4f}")
 
-            # Create visualization with variant in filename
-            save_path = output_dir / f"prediction_{args.variant}_{args.split}_sample_{idx + 1:03d}.png"
+            # Create visualization (simpler filename since already in model-specific directory)
+            save_path = output_dir / f"{args.split}_sample_{idx + 1:03d}.png"
             visualize_prediction(
                 input_np,
                 target_np,
@@ -340,7 +355,7 @@ def main():
                 threshold=args.threshold,
                 sample_idx=idx,
                 save_path=save_path,
-                variant=args.variant
+                variant=f"{args.variant}_{args.temporal_frames}y"
             )
             plt.close()  # Close to save memory
 

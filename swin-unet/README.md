@@ -22,44 +22,77 @@ st-Swin-UNet is a Swin Transformer-based U-Net architecture for binary segmentat
 
 ## Quick Reference
 
-**Train Tiny Variant (6.8M params):**
+**Train Tiny Variant (6.8M params, 4-year input):**
 ```bash
 python -m swin-unet.train
 ```
 
-**Train Small Variant (11M params):**
+**Train Tiny Variant (9-year input for extended context):**
+```bash
+python -m swin-unet.train --temporal-frames 9
+```
+
+**Train Small Variant (11M params, 4-year input):**
 ```bash
 python -m swin-unet.train --variant small --batch-size 4
 ```
 
+**Train Small Variant (9-year input):**
+```bash
+python -m swin-unet.train --variant small --batch-size 4 --temporal-frames 9
+```
+
 **Evaluate Best Checkpoint:**
 ```bash
-# Evaluate tiny variant (default)
-python -m swin-unet.eval_all_checkpoints
+# Evaluate tiny variant with 4-year input (default)
+python -m swin-unet.eval_all_checkpoints --variant tiny --temporal-frames 4
 
-# Evaluate small variant
-python -m swin-unet.eval_all_checkpoints --variant small
+# Evaluate tiny variant with 9-year input
+python -m swin-unet.eval_all_checkpoints --variant tiny --temporal-frames 9
+
+# Evaluate small variant with 4-year input
+python -m swin-unet.eval_all_checkpoints --variant small --temporal-frames 4
+
+# Evaluate small variant with 9-year input
+python -m swin-unet.eval_all_checkpoints --variant small --temporal-frames 9
 ```
 
 **Visualize Predictions:**
 ```bash
-# Visualize tiny variant predictions
+# Visualize tiny-4y predictions
 python -m swin-unet.visualize_predictions \
-    --checkpoint swin-unet/checkpoints_tiny/stswin_tiny_epoch042.pt
+    --checkpoint swin-unet/checkpoints_tiny_4y/stswin_tiny_4y_epoch042.pt \
+    --variant tiny --temporal-frames 4
 
-# Visualize small variant predictions
+# Visualize tiny-9y predictions
 python -m swin-unet.visualize_predictions \
-    --checkpoint swin-unet/checkpoints_small/stswin_small_epoch042.pt \
-    --variant small
+    --checkpoint swin-unet/checkpoints_tiny_9y/stswin_tiny_9y_epoch042.pt \
+    --variant tiny --temporal-frames 9
+
+# Visualize small-4y predictions
+python -m swin-unet.visualize_predictions \
+    --checkpoint swin-unet/checkpoints_small_4y/stswin_small_4y_epoch042.pt \
+    --variant small --temporal-frames 4
+
+# Visualize small-9y predictions
+python -m swin-unet.visualize_predictions \
+    --checkpoint swin-unet/checkpoints_small_9y/stswin_small_9y_epoch042.pt \
+    --variant small --temporal-frames 9
 ```
 
 **Plot Metrics:**
 ```bash
-# Plot tiny variant metrics (default)
-python -m swin-unet.plot_score
+# Plot tiny-4y metrics (default)
+python -m swin-unet.plot_score --variant tiny --temporal-frames 4
 
-# Plot small variant metrics
-python -m swin-unet.plot_score --variant small
+# Plot tiny-9y metrics
+python -m swin-unet.plot_score --variant tiny --temporal-frames 9
+
+# Plot small-4y metrics
+python -m swin-unet.plot_score --variant small --temporal-frames 4
+
+# Plot small-9y metrics
+python -m swin-unet.plot_score --variant small --temporal-frames 9
 ```
 
 ---
@@ -98,23 +131,26 @@ python -m swin-unet.train --variant small --batch-size 4
 **Advanced training options:**
 ```bash
 # Custom learning rate and epochs
-python -m swin-unet.train --lr 5e-5 --epochs 100
+python -m swin-unet.train --lr 5e-5 --epochs 100 --temporal-frames 4
 
 # Use learning rate scheduler
-python -m swin-unet.train --use-scheduler
+python -m swin-unet.train --use-scheduler --temporal-frames 4
 
 # Different temporal aggregation
-python -m swin-unet.train --temporal-aggregation learned_weighted_sum
+python -m swin-unet.train --temporal-aggregation learned_weighted_sum --temporal-frames 4
+
+# Train with 9-year input for extended temporal context
+python -m swin-unet.train --variant tiny --temporal-frames 9 --epochs 50
 
 # Combine multiple options
 python -m swin-unet.train --variant small --batch-size 4 \
-    --lr 1e-4 --epochs 50 --use-scheduler
+    --temporal-frames 4 --lr 1e-4 --epochs 50 --use-scheduler
 ```
 
 This will:
 - Load and cache the dataset (first run may take a while)
 - Train the model for the specified number of epochs
-- Save checkpoints to `swin-unet/checkpoints_{variant}/`
+- Save checkpoints to `swin-unet/checkpoints_{variant}_{temporal_frames}y/`
 - Print training and validation metrics
 
 ### 3. Evaluate All Checkpoints
@@ -122,52 +158,62 @@ This will:
 After training, evaluate all saved checkpoints on the test set:
 
 ```bash
-# Evaluate tiny variant (default)
-python -m swin-unet.eval_all_checkpoints
+# Evaluate tiny variant with 4-year input
+python -m swin-unet.eval_all_checkpoints --variant tiny --temporal-frames 4
 
-# Evaluate small variant
-python -m swin-unet.eval_all_checkpoints --variant small
+# Evaluate tiny variant with 9-year input
+python -m swin-unet.eval_all_checkpoints --variant tiny --temporal-frames 9
+
+# Evaluate small variant with 4-year input
+python -m swin-unet.eval_all_checkpoints --variant small --temporal-frames 4
 ```
 
-This generates a CSV file at `swin-unet/scores/test_metrics_all_epochs_stswin_{variant}.csv` with metrics for each epoch.
+This generates a CSV file at `swin-unet/scores/test_metrics_all_epochs_stswin_{variant}_{temporal_frames}y.csv` with metrics for each epoch.
 
-**Important:** The script automatically uses the correct checkpoint directory and output paths based on the `--variant` argument. Tiny and small model checkpoints are kept completely separate.
+**Important:** The script automatically uses the correct checkpoint directory and output paths based on both the `--variant` and `--temporal-frames` arguments. All configurations are kept completely separate.
 
 ### 4. Visualize Metrics
 
 Create plots and find the best-performing epoch:
 
 ```bash
-# Plot tiny variant metrics (default)
-python -m swin-unet.plot_score
+# Plot tiny-4y metrics
+python -m swin-unet.plot_score --variant tiny --temporal-frames 4
 
-# Plot small variant metrics
-python -m swin-unet.plot_score --variant small
+# Plot tiny-9y metrics
+python -m swin-unet.plot_score --variant tiny --temporal-frames 9
+
+# Plot small-4y metrics
+python -m swin-unet.plot_score --variant small --temporal-frames 4
 ```
 
 This will:
 - Print best epochs for each metric (F1, CSI, loss, etc.)
-- Save summary CSV to `swin-unet/plots/best_epoch_summary_stswin_{variant}.csv`
+- Save summary CSV to `swin-unet/plots/best_epoch_summary_stswin_{variant}_{temporal_frames}y.csv`
 - Generate plots: loss vs epoch, F1/CSI vs epoch
-- Save plots to `swin-unet/plots/` with variant-specific filenames
+- Save plots to `swin-unet/plots/` with configuration-specific filenames
 
-**Important:** The script automatically reads the correct CSV file based on the `--variant` argument. Plots for tiny and small models are saved with different filenames to prevent overwriting.
+**Important:** The script automatically reads the correct CSV file based on both `--variant` and `--temporal-frames` arguments. Each configuration gets its own plot files.
 
 ### 5. Visualize Predictions
 
 See actual model predictions on test samples:
 
 ```bash
-# Visualize tiny variant predictions
+# Visualize tiny-4y predictions
 python -m swin-unet.visualize_predictions \
-    --checkpoint swin-unet/checkpoints_tiny/stswin_tiny_epoch042.pt \
-    --num-samples 5
+    --checkpoint swin-unet/checkpoints_tiny_4y/stswin_tiny_4y_epoch042.pt \
+    --variant tiny --temporal-frames 4 --num-samples 5
 
-# Visualize small variant predictions
+# Visualize tiny-9y predictions
 python -m swin-unet.visualize_predictions \
-    --checkpoint swin-unet/checkpoints_small/stswin_small_epoch042.pt \
-    --variant small \
-    --num-samples 5
+    --checkpoint swin-unet/checkpoints_tiny_9y/stswin_tiny_9y_epoch042.pt \
+    --variant tiny --temporal-frames 9 --num-samples 5
+
+# Visualize small-4y predictions
+python -m swin-unet.visualize_predictions \
+    --checkpoint swin-unet/checkpoints_small_4y/stswin_small_4y_epoch042.pt \
+    --variant small --temporal-frames 4 --num-samples 5
 ```
 
 This will:
@@ -178,54 +224,113 @@ This will:
   - Ground truth target
   - Model prediction (probabilities and binary)
   - Error map highlighting incorrect pixels
-- Save high-resolution images to `swin-unet/plots/` with variant-specific filenames
+- Save high-resolution images to `swin-unet/plots/` with configuration-specific filenames
 - Print per-sample metrics (accuracy, precision, recall, F1, IoU)
 
-**Important:** The `--variant` argument ensures that visualization filenames include the model variant (e.g., `prediction_tiny_test_sample_001.png` vs `prediction_small_test_sample_001.png`) to prevent overwriting when comparing models.
+**Important:** The `--variant` and `--temporal-frames` arguments ensure that visualization filenames include the full configuration (e.g., `prediction_tiny_4y_test_sample_001.png` vs `prediction_small_9y_test_sample_001.png`) to prevent overwriting when comparing models.
 
 ---
 
-## Managing Tiny and Small Variants Separately
+## Managing Model Configurations Separately
 
-All scripts now properly handle tiny and small model variants as completely separate entities. This allows you to train, evaluate, and compare both variants simultaneously without any risk of overwriting data.
+All scripts properly handle model variants (tiny/small) and temporal configurations (4y/9y) as completely separate entities. This allows you to train, evaluate, and compare all configurations simultaneously without any risk of overwriting data.
 
-### Automatic Variant-Specific Paths
+### Automatic Configuration-Specific Paths
 
-When you specify `--variant tiny` or `--variant small`, each script automatically uses the correct paths:
+When you specify `--variant` and `--temporal-frames`, each script automatically uses the correct paths. For example, with `--variant tiny --temporal-frames 4`:
 
-| Component | Tiny Variant | Small Variant |
-|-----------|--------------|---------------|
-| **Checkpoints** | `checkpoints_tiny/stswin_tiny_epoch*.pt` | `checkpoints_small/stswin_small_epoch*.pt` |
-| **Evaluation CSV** | `scores/test_metrics_all_epochs_stswin_tiny.csv` | `scores/test_metrics_all_epochs_stswin_small.csv` |
-| **Plot files** | `plots/test_loss_stswin_tiny.png` | `plots/test_loss_stswin_small.png` |
-| **Visualizations** | `plots/prediction_tiny_test_sample_*.png` | `plots/prediction_small_test_sample_*.png` |
+| Component | Example Path |
+|-----------|--------------|
+| **Checkpoints** | `checkpoints_tiny_4y/stswin_tiny_4y_epoch*.pt` |
+| **Evaluation CSV** | `scores/test_metrics_all_epochs_stswin_tiny_4y.csv` |
+| **Plot files** | `plots/test_loss_stswin_tiny_4y.png` |
+| **Visualizations** | `plots/prediction_tiny_4y_test_sample_*.png` |
 
-### Complete Workflow for Both Variants
+### Complete Workflow Example
+
+Train and evaluate a specific configuration (e.g., tiny with 4-year input):
 
 ```bash
-# Train both variants
-python -m swin-unet.train --variant tiny --epochs 50
-python -m swin-unet.train --variant small --batch-size 4 --epochs 50
+# Train
+python -m swin-unet.train --variant tiny --temporal-frames 4 --epochs 50
 
-# Evaluate both variants
-python -m swin-unet.eval_all_checkpoints --variant tiny
-python -m swin-unet.eval_all_checkpoints --variant small
+# Evaluate all checkpoints
+python -m swin-unet.eval_all_checkpoints --variant tiny --temporal-frames 4
 
-# Plot metrics for both
-python -m swin-unet.plot_score --variant tiny
-python -m swin-unet.plot_score --variant small
+# Plot metrics
+python -m swin-unet.plot_score --variant tiny --temporal-frames 4
 
-# Visualize predictions from both
+# Visualize predictions
 python -m swin-unet.visualize_predictions \
-    --checkpoint swin-unet/checkpoints_tiny/stswin_tiny_epoch042.pt \
-    --variant tiny
-
-python -m swin-unet.visualize_predictions \
-    --checkpoint swin-unet/checkpoints_small/stswin_small_epoch042.pt \
-    --variant small
+    --checkpoint swin-unet/checkpoints_tiny_4y/stswin_tiny_4y_epoch042.pt \
+    --variant tiny --temporal-frames 4
 ```
 
-All outputs will be stored in separate locations, making it easy to compare the performance of the two variants side-by-side.
+All outputs will be stored in separate locations based on the variant and temporal configuration.
+
+---
+
+## Temporal Configuration: 4-Year vs 9-Year Input Sequences
+
+The model supports two temporal configurations for fair comparison with baseline models:
+- **4-year input** (4 input years + 1 target): Matches the original thesis model configuration
+- **9-year input** (9 input years + 1 target): Extended temporal context for improved predictions
+
+All scripts now support the `--temporal-frames` argument to specify the temporal configuration.
+
+### Automatic Configuration-Specific Paths
+
+When you specify `--temporal-frames 4` or `--temporal-frames 9`, all outputs are kept separate:
+
+| Configuration | 4-Year Setup | 9-Year Setup |
+|---------------|--------------|--------------|
+| **Checkpoints** | `checkpoints_tiny_4y/` | `checkpoints_tiny_9y/` |
+| **Checkpoint files** | `stswin_tiny_4y_epoch*.pt` | `stswin_tiny_9y_epoch*.pt` |
+| **Evaluation CSV** | `test_metrics_all_epochs_stswin_tiny_4y.csv` | `test_metrics_all_epochs_stswin_tiny_9y.csv` |
+| **Plots** | `test_loss_stswin_tiny_4y.png` | `test_loss_stswin_tiny_9y.png` |
+| **Visualizations** | `prediction_tiny_4y_test_sample_*.png` | `prediction_tiny_9y_test_sample_*.png` |
+
+### Training with Different Temporal Configurations
+
+```bash
+# Train tiny model with 4-year input (default, matches original thesis)
+python -m swin-unet.train --variant tiny --temporal-frames 4
+
+# Train tiny model with 9-year input (extended context)
+python -m swin-unet.train --variant tiny --temporal-frames 9
+
+# Train small model with 4-year input
+python -m swin-unet.train --variant small --batch-size 4 --temporal-frames 4
+
+# Train small model with 9-year input
+python -m swin-unet.train --variant small --batch-size 4 --temporal-frames 9
+```
+
+### Complete Comparison Workflow
+
+Compare all configurations side-by-side:
+
+```bash
+# Train all four configurations
+python -m swin-unet.train --variant tiny --temporal-frames 4 --epochs 50
+python -m swin-unet.train --variant tiny --temporal-frames 9 --epochs 50
+python -m swin-unet.train --variant small --batch-size 4 --temporal-frames 4 --epochs 50
+python -m swin-unet.train --variant small --batch-size 4 --temporal-frames 9 --epochs 50
+
+# Evaluate all configurations
+python -m swin-unet.eval_all_checkpoints --variant tiny --temporal-frames 4
+python -m swin-unet.eval_all_checkpoints --variant tiny --temporal-frames 9
+python -m swin-unet.eval_all_checkpoints --variant small --temporal-frames 4
+python -m swin-unet.eval_all_checkpoints --variant small --temporal-frames 9
+
+# Plot metrics for comparison
+python -m swin-unet.plot_score --variant tiny --temporal-frames 4
+python -m swin-unet.plot_score --variant tiny --temporal-frames 9
+python -m swin-unet.plot_score --variant small --temporal-frames 4
+python -m swin-unet.plot_score --variant small --temporal-frames 9
+```
+
+**Important:** Each configuration maintains completely separate checkpoints, evaluation results, and visualizations. You can train and evaluate all configurations simultaneously without any risk of overwriting data.
 
 ---
 
@@ -476,7 +581,8 @@ model_cfg.temporal_aggregation = "concat_proj"  # or "learned_weighted_sum", "me
 
 ### Data Configuration (`DataConfig`)
 ```python
-year_target = 5            # Temporal sequence: 4 input years + 1 target
+temporal_frames = 4        # Number of input years (4 or 9)
+year_target = 5            # Total sequence: temporal_frames + 1 target
 dir_folders = "data/satellite/dataset_month3"
 batch_size = 8             # Reduced for larger model
 num_workers = 12           # Parallel data loading workers
@@ -712,34 +818,55 @@ swin-unet/
 │   ├── dataset_month3_training.pt     (6.3 GB)
 │   ├── dataset_month3_validation.pt   (229 MB)
 │   └── dataset_month3_testing.pt      (229 MB)
-├── checkpoints_tiny/           # Tiny variant checkpoints (27 MB each)
-│   ├── stswin_tiny_epoch001.pt
-│   ├── stswin_tiny_epoch002.pt
+├── checkpoints_tiny_4y/        # Tiny variant, 4-year input (27 MB each)
+│   ├── stswin_tiny_4y_epoch001.pt
+│   ├── stswin_tiny_4y_epoch002.pt
 │   └── ... (up to epoch 050)
-├── checkpoints_small/          # Small variant checkpoints (44 MB each)
-│   ├── stswin_small_epoch001.pt
-│   ├── stswin_small_epoch002.pt
-│   └── ... (up to epoch 050)
-├── plots/                      # Visualization outputs
-│   ├── test_loss_stswin_tiny.png
-│   ├── test_loss_stswin_small.png
-│   ├── test_f1_csi_stswin_tiny.png
-│   ├── test_f1_csi_stswin_small.png
-│   ├── best_epoch_summary_stswin_tiny.csv
-│   ├── best_epoch_summary_stswin_small.csv
-│   ├── prediction_tiny_test_sample_001.png
-│   ├── prediction_small_test_sample_001.png
-│   └── ... (prediction visualizations)
+├── checkpoints_tiny_9y/        # Tiny variant, 9-year input (27 MB each)
+│   ├── stswin_tiny_9y_epoch001.pt
+│   └── ...
+├── checkpoints_small_4y/       # Small variant, 4-year input (44 MB each)
+│   ├── stswin_small_4y_epoch001.pt
+│   └── ...
+├── checkpoints_small_9y/       # Small variant, 9-year input (44 MB each)
+│   ├── stswin_small_9y_epoch001.pt
+│   └── ...
+├── plots/                      # Visualization outputs (organized by model)
+│   ├── stswin_tiny_4y/
+│   │   ├── best_epoch_summary.csv
+│   │   ├── test_loss.png
+│   │   ├── test_f1_csi.png
+│   │   └── predictions/
+│   │       ├── test_sample_001.png
+│   │       ├── test_sample_002.png
+│   │       └── ...
+│   ├── stswin_tiny_9y/
+│   │   ├── best_epoch_summary.csv
+│   │   ├── test_loss.png
+│   │   ├── test_f1_csi.png
+│   │   └── predictions/
+│   │       └── ...
+│   ├── stswin_small_4y/
+│   │   └── ... (same structure)
+│   └── stswin_small_9y/
+│       └── ... (same structure)
 └── scores/                     # Evaluation CSVs
-    ├── test_metrics_all_epochs_stswin_tiny.csv
-    └── test_metrics_all_epochs_stswin_small.csv
+    ├── test_metrics_all_epochs_stswin_tiny_4y.csv
+    ├── test_metrics_all_epochs_stswin_tiny_9y.csv
+    ├── test_metrics_all_epochs_stswin_small_4y.csv
+    └── test_metrics_all_epochs_stswin_small_9y.csv
 ```
 
-**Important:** Checkpoints, evaluation results, and visualizations for tiny and small variants are now completely separated to prevent any accidental overwriting. Each variant has its own:
-- Checkpoint directory: `checkpoints_{variant}/`
-- Evaluation CSV: `scores/test_metrics_all_epochs_stswin_{variant}.csv`
-- Plot files with variant in filename: `test_loss_stswin_{variant}.png`
-- Prediction visualizations: `prediction_{variant}_{split}_sample_*.png`
+**Important:** Checkpoints, evaluation results, and visualizations are completely separated by both variant AND temporal configuration. Each combination has its own:
+- **Checkpoint directory**: `checkpoints_{variant}_{temporal}y/`
+- **Checkpoint files**: `stswin_{variant}_{temporal}y_epoch*.pt`
+- **Evaluation CSV**: `scores/test_metrics_all_epochs_stswin_{variant}_{temporal}y.csv`
+- **Plots directory**: `plots/stswin_{variant}_{temporal}y/`
+  - Metric plots: `test_loss.png`, `test_f1_csi.png`
+  - Summary: `best_epoch_summary.csv`
+  - Predictions: `predictions/test_sample_*.png`
+
+This hierarchical organization allows you to train and compare all 4 configurations (tiny-4y, tiny-9y, small-4y, small-9y) simultaneously without any risk of data overwriting, with each model's outputs cleanly separated into its own directory.
 
 ## Code Reuse
 

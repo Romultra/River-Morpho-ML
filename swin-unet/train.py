@@ -59,6 +59,13 @@ def parse_args():
         choices=["concat_proj", "learned_weighted_sum", "mean"],
         help=f"Temporal aggregation method (default: {model_cfg.temporal_aggregation})",
     )
+    parser.add_argument(
+        "--temporal-frames",
+        type=int,
+        default=data_cfg.temporal_frames,
+        choices=[4, 9],
+        help=f"Number of input temporal frames: 4 or 9 years (default: {data_cfg.temporal_frames})",
+    )
 
     # Training configuration
     parser.add_argument(
@@ -154,6 +161,8 @@ def main():
     # Update configs with command-line arguments
     model_cfg.variant = args.variant
     model_cfg.temporal_aggregation = args.temporal_aggregation
+    data_cfg.temporal_frames = args.temporal_frames
+    data_cfg.year_target = args.temporal_frames + 1  # Update year_target based on temporal_frames
     train_cfg.num_epochs = args.epochs
     train_cfg.lr = args.lr
     train_cfg.weight_decay = args.weight_decay
@@ -162,11 +171,12 @@ def main():
     train_cfg.use_scheduler = args.use_scheduler
     train_cfg.warmup_epochs = args.warmup_epochs
 
-    # Set checkpoint directory based on variant if not specified
+    # Set checkpoint directory based on variant and temporal frames if not specified
+    model_id = f"{args.variant}_{args.temporal_frames}y"
     if args.checkpoint_dir:
         train_cfg.ckpt_dir = Path(args.checkpoint_dir)
     else:
-        train_cfg.ckpt_dir = Path(f"swin-unet/checkpoints_{args.variant}")
+        train_cfg.ckpt_dir = Path(f"swin-unet/checkpoints_{model_id}")
 
     # -----------------------
     # 1. Device configuration
@@ -185,6 +195,7 @@ def main():
     print(f"Training Configuration")
     print(f"{'='*60}")
     print(f"Model variant: {model_cfg.variant}")
+    print(f"Temporal frames: {data_cfg.temporal_frames} input years + 1 target")
     print(f"Temporal aggregation: {model_cfg.temporal_aggregation}")
     print(f"Epochs: {train_cfg.num_epochs}")
     print(f"Learning rate: {train_cfg.lr}")
@@ -279,7 +290,7 @@ def main():
         print(f"\n===== Epoch {epoch}/{train_cfg.num_epochs} =====")
 
         # Checkpoint path
-        ckpt_path = train_cfg.ckpt_dir / f"stswin_{model_cfg.variant}_epoch{epoch:03d}.pt"
+        ckpt_path = train_cfg.ckpt_dir / f"stswin_{model_id}_epoch{epoch:03d}.pt"
 
         # Training
         train_losses = training_unet(
