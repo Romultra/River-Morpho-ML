@@ -35,8 +35,8 @@ We investigate whether **transformer-based architectures** can overcome these li
 2. **st-Swin-UNet**: Replaces the entire CNN backbone with a Swin Transformer-based U-Net that uses learnable spatio-temporal patch embeddings
 
 **Key Findings:**
-- **JamUNet baseline achieves best performance with F1 = 0.722** despite being the simplest architecture
-- TransformerUNet performs worse than baseline (F1: 0.691 vs 0.722), likely due to limited training data
+- **JamUNet baseline achieves best performance with F1 = 0.712** despite being the simplest architecture
+- TransformerUNet performs worse than baseline (F1: 0.685 vs 0.712), likely due to limited training data
 - st-Swin-UNet achieves F1 = 0.704 (small variant), falling between TransformerUNet and baseline but not surpassing the simple CNN
 - Window-based attention (Swin) is more memory-efficient than per-pixel temporal transformers but doesn't improve accuracy
 - All models face the challenge of limited temporal training data (~700 images over 30 years)
@@ -47,7 +47,7 @@ We investigate whether **transformer-based architectures** can overcome these li
 
 - **[QUICK_START.md](QUICK_START.md)** - 5-minute setup and first model training
 - **[swin-unet/README.md](swin-unet/README.md)** - Comprehensive st-Swin-UNet documentation
-- **[Report/main.tex](Report/main.tex)** - Academic report with detailed methodology and results
+- **[report/main.tex](report/main.tex)** - Academic report with detailed methodology and results
 
 ---
 
@@ -65,7 +65,7 @@ River-Morpho-ML/
 │   ├── train.py               # Training script
 │   ├── eval_all_checkpoints.py
 │   ├── preprocessing/         # Data loading with caching
-│   └── checkpoints_*/         # Model checkpoints
+│   └── pretrained/            # Pretrained model checkpoints
 │
 ├── swin-unet/                  # st-Swin-UNet implementation
 │   ├── st_swin_unet_model.py  # Swin Transformer U-Net architecture
@@ -83,9 +83,10 @@ River-Morpho-ML/
 │
 ├── data/                      # Satellite imagery and auxiliary data
 ├── benchmarks/                # Baseline comparison models
-├── Report/                    # LaTeX report and figures
-│   ├── main.tex
-│   └── ML Course Project 2 description and guidelines.pdf
+├── report/                    # LaTeX report and figures
+│   ├── main.tex                                                    # Project report tex format
+│   ├── Machine_Learning_Project_2.pdf                              # Project report in pdf format
+│   └── ML Course Project 2 description and guidelines.pdf          
 │
 ├── braided.yml                # Conda environment (legacy models)
 ├── requirements.txt           # pip requirements (transformer models)
@@ -124,11 +125,17 @@ pip install ./GDAL-3.9.2-cp39-cp39-win_amd64.whl
 pip install -r requirements.txt
 ```
 
-**Note:** For macOS/Linux, install GDAL using your system package manager before step 4.
+**Note:** For macOS/Linux, install GDAL using your system package manager before step 4. Due to legacy issues with the original 
+JamUNet code, it is advised to use the code only on Windows operating system.
+
 
 ### Training Models
 
 **1. TransformerUNet**
+All TransformerUNet (TransUNet) files are located within the `transformer_cnn_model/` directory. To configure any parameter of
+the model, the user should modify parameter values within `transformer_cnn_model/config.py`. After modification, the pipeline below
+shows the training and score plotting process in chronological order.
+
 ```bash
 # Configure in transformer_cnn_model/config.py
 python -m transformer_cnn_model.train
@@ -139,6 +146,9 @@ python -m transformer_cnn_model.eval_all_checkpoints
 # Plot training metrics
 python -m transformer_cnn_model.plot_score
 ```
+
+Selected checkpoints used in the report are in `transformer_cnn_model/pretrained/`. More detailed docstrings are available in each
+file within `transformer_cnn_model/`.
 
 **2. st-Swin-UNet**
 
@@ -195,20 +205,20 @@ See [swin-unet/README.md](swin-unet/README.md) for comprehensive st-Swin-UNet do
 - ~500K parameters
 
 **Results (4 input years):**
-- **F1 Score: 0.722** (epoch 8) - **BEST across all models**
+- **F1 Score: 0.712** (epoch 9) 
 - **Accuracy: 93.5%**
-- **Precision: 75.3%**
-- **Recall: 77.0%**
+- **Precision: 72.6%**
+- **Recall: 70.2%**
 
 **Why it works:** Despite lacking explicit long-range temporal modeling, the shallow 3D convolutions combined with strong spatial features are sufficient for this dataset. Outperforms both transformer approaches, suggesting that model complexity doesn't always improve performance with limited training data.
 
 ### 2. TransformerUNet
-**Hybrid CNN-Transformer architecture**
+**Hybrid CNN-Transformer architecture (used in report)**
 - Temporal transformer block processes each pixel's time series independently (B×H×W sequences of length T)
 - Multi-head self-attention with 2 encoder layers (d_model=8, nhead=4, dim_feedforward=64)
 - Standard U-Net backbone (4 encoder/decoder stages with 2D convolutions)
 - ~500K parameters total
-- Chunked processing (max 60,000 tokens per batch to avoid transformer batch limits)
+- Chunked processing (to avoid transformer batch limits)
 
 **Architecture Flow:**
 ```
@@ -216,16 +226,18 @@ Input (B×T×H×W) → TemporalTransformer → U-Net → Output (B×H×W)
 ```
 
 **Results (4 input years):**
-- F1 Score: 0.691 (epoch 5)
-- Accuracy: 93.4%
-- Precision: ~90%
-- Recall: ~70%
+- F1 Score: 0.685 (epoch 19)
+- Accuracy: 92.6%
+- Precision: 67.3%
+- Recall: 70.0%
 
 **Results (9 input years):**
-- F1 Score: 0.708 (epoch 5) - slight improvement
-- Accuracy: 93.6%
+- F1 Score: 0.679 (epoch 33) 
+- Accuracy: 92.9%
+- Precision: 66.8%
+- Recall: 69.3%
 
-**Key Finding:** TransformerUNet performs **slightly worse** than JamUNet baseline (F1: 0.691 vs 0.722), likely due to:
+**Key Finding:** In terms of scores, TransformerUNet performs **slightly worse** than JamUNet baseline, likely due to:
 - Insufficient training data (~700 images) for transformer to learn temporal patterns effectively
 - CNN component dominates training, transformer provides minimal benefit
 - Linear projection back to scalar per timestep may limit temporal information flow
@@ -251,8 +263,8 @@ Input (B×T×H×W)
 - **F1 Score:** 0.7044 (epoch 14, selected by validation F1=0.6682)
 - **Accuracy:** 92.9%
 - **CSI/IoU:** 0.5438
-- **Precision:** 67.1% (lower than baseline's 75.3%)
-- **Recall:** 74.2% (lower than baseline's 77.0%)
+- **Precision:** 67.1% (lower than baseline's 72.6%)
+- **Recall:** 74.2% (lower than baseline's 70.2%)
 - **Memory:** ~13GB GPU RAM (batch size 4)
 - **Training Speed:** 2-4 min/epoch on RTX 4090
 
@@ -279,25 +291,24 @@ All results below are for **4 input years** (base configuration):
 
 | Model | Parameters | F1 Score | Accuracy | Precision | Recall | Best Epoch (Val) |
 |-------|------------|----------|----------|-----------|--------|------------------|
-| **JamUNet** (baseline) | ~500K | **0.722** | 93.5% | 75.3% | 77.0% | 8 |
-| **TransformerUNet** | ~500K | 0.691 | 93.4% | 90.0% | 70.0% | 5 |
+| **JamUNet** (baseline) | ~500K | **0.712** | 93.5% | 72.6% | 70.2% | 9 |
+| **TransformerUNet** | ~500K | 0.685 | 92.6% | 67.3% | 70.0% | 19 |
 | **st-Swin-UNet (Tiny)** | 6.8M | 0.7038 | 92.8% | 66.4% | 74.9% | 33 |
 | **st-Swin-UNet (Small)** | 41.3M | **0.7044** | **92.9%** | 67.1% | 74.2% | 14 |
 
 **With 9 input years:**
-- **JamUNet**: F1 = 0.715, Accuracy = 93.7%
-- **TransformerUNet**: F1 = 0.708, Accuracy = 93.6%
+- **JamUNet**: F1 = 0.677, Accuracy = 93.3% (epoch 18)
+- **TransformerUNet**: F1 = 0.679, Accuracy = 92.9% (epoch 33)
 - **st-Swin-UNet (Tiny)**: F1 = 0.7019, Accuracy = 93.0% (epoch 20)
 - **st-Swin-UNet (Small)**: F1 = 0.6976, Accuracy = 92.9% (epoch 30)
 
 **Key Insights:**
-- **JamUNet baseline is the best model** (F1: 0.722) despite being the simplest architecture
-- st-Swin-UNet (F1: 0.7044) outperforms TransformerUNet (F1: 0.691) but falls 2.5% short of baseline
+- **JamUNet baseline is the best model** (F1: 0.712) despite being the simplest architecture
+- st-Swin-UNet (F1: 0.7044) outperforms TransformerUNet (F1: 0.685) but falls short of baseline
 - Small variant (41.3M params) provides minimal improvement over tiny variant (6.8M params): F1 0.7044 vs 0.7038
 - Both transformer approaches fail to surpass the simple CNN, suggesting transformers need more training data
 - **Adding more input years (4→9) hurts performance** for st-Swin-UNet: tiny drops from 0.7038 to 0.7019, small drops from 0.7044 to 0.6976
 - All models plateau around 93-94% accuracy, suggesting fundamental data quality/quantity limitations
-- **Proper validation-based model selection** prevents test set leakage and provides unbiased performance estimates
 
 ---
 
@@ -322,7 +333,7 @@ All models use similar training configurations for fair comparison:
 
 ```python
 # Data
-year_target = 10           # 4 input years + 1 target (or 9 + 1)
+year_target = 5           # 4 input years + 1 target (or 9 + 1)
 batch_size = 8             # Varies by model
 img_size = (1000, 500)
 
@@ -347,9 +358,8 @@ Model-specific configurations in respective `config.py` files:
 ### Metrics
 All models evaluated on:
 - **F1 Score** (primary metric for imbalanced data)
-- **Critical Success Index (CSI)**
 - **Accuracy, Precision, Recall**
-- **ROC AUC**
+- **Critical Success Index (CSI)**
 
 ### Visualization Tools
 
@@ -378,10 +388,10 @@ python -m swin-unet.visualize_predictions \
 ## Findings & Discussion
 
 ### Surprising Result: Simple CNN Wins
-Despite our hypothesis that transformers would improve temporal modeling, **JamUNet baseline (F1=0.722) outperforms both transformer architectures**:
-- TransformerUNet (F1=0.691) underperforms by 4.3%
-- st-Swin-UNet tiny (F1=0.7038) underperforms by 2.5%
-- st-Swin-UNet small (F1=0.7044) underperforms by 2.4%
+Despite our hypothesis that transformers would improve temporal modeling, **JamUNet baseline (F1=0.712) outperforms both transformer architectures**:
+- TransformerUNet (F1=0.685) underperforms by 3.8%
+- st-Swin-UNet tiny (F1=0.7038) underperforms by 1.2%
+- st-Swin-UNet small (F1=0.7044) underperforms by 1.1%
 - Neither transformer approach justifies the added architectural complexity
 - Adding more input years (4→9) **hurts st-Swin-UNet performance**: tiny drops 0.27% (0.7038→0.7019), small drops 0.96% (0.7044→0.6976)
 
@@ -398,7 +408,7 @@ Despite our hypothesis that transformers would improve temporal modeling, **JamU
 2. **Window-based attention** (Swin) is more memory-efficient than per-pixel temporal transformers, enabling larger models
 3. **Transformers need more data** - ~700 training images is insufficient for transformers to learn complex temporal patterns
 4. **Architecture complexity doesn't guarantee improvement** - More parameters (6.8M-41.3M vs 500K) and sophisticated mechanisms don't overcome data limitations
-5. **st-Swin-UNet outperforms TransformerUNet** - Window-based attention (F1=0.7044) performs better than per-pixel temporal attention (F1=0.691), though both fall short of the CNN baseline
+5. **st-Swin-UNet outperforms TransformerUNet** - Window-based attention (F1=0.7044) performs better than per-pixel temporal attention (F1=0.685), though both fall short of the CNN baseline
 6. **Diminishing returns with model size** - 6× more parameters (41.3M vs 6.8M) yields only +0.0006 F1 improvement
 7. **4-year temporal window is optimal** - Extended 9-year history degrades performance, suggesting limited benefit from distant temporal context
 8. **Proper evaluation methodology matters** - Validation-based checkpoint selection prevents test set leakage and provides unbiased estimates
@@ -425,7 +435,7 @@ Despite our hypothesis that transformers would improve temporal modeling, **JamU
 3. **Do not deploy models directly** - benchmark against physics-based fluid simulations first
 4. Acknowledge that ML models lack physical constraints of computational fluid dynamics
 
-See `Report/main.tex` Section 1 for detailed ethical risk assessment.
+See `report/main.tex` Section 1 for detailed ethical risk assessment.
 
 ---
 

@@ -8,7 +8,7 @@ from typing import Optional
 @dataclass
 class DataConfig:
     # Temporal setup
-    year_target: int = 10
+    year_target: int = 5
 
     # Dataset paths
     dir_folders: str = "data/satellite/dataset_month3"
@@ -33,7 +33,7 @@ class DataConfig:
 @dataclass
 class ModelConfig:
     # Which architecture: "transunet" or "unet3d"
-    architecture: str = "unet3d"
+    architecture: str = "transunet"
 
     # Shared UNet params
     init_hid_dim: int = 8
@@ -67,18 +67,18 @@ class TrainConfig:
     physics: bool = False
 
     # Where to save checkpoints
-    ckpt_dir: Path = Path("transformer_cnn_model/checkpoints_unet3d_9years")
+    ckpt_dir: Path = Path("transformer_cnn_model/checkpoints_transunet")
 
 
 @dataclass
 class EvalConfig:
     # Pattern for evaluating transformer checkpoints
-    checkpoint_pattern: str = "unet3d_epoch*.pt"
+    checkpoint_pattern: str = "transunet_epoch*.pt"
     # Default directory for checkpoints (can still be overridden via CLI)
-    checkpoint_dir: Path = Path("transformer_cnn_model/checkpoints_unet3d_9years")
+    checkpoint_dir: Path = Path("transformer_cnn_model/checkpoints_transunet")
     # Default CSV for scores
     scores_csv: Path = Path(
-        "transformer_cnn_model/scores/test_metrics_all_epochs_unet3d_9years.csv"
+        "transformer_cnn_model/scores/test_metrics_all_epochs_transunet.csv"
     )
 
 
