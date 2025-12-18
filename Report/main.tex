@@ -109,15 +109,11 @@ The temporally contextualised tensor created by the temporal transformer block i
 \noindent To summarise, compared to the standard JamUNet model, which uses fixed local 3D convolutions with shallow temporal receptive fields, the transformer is expected to learn long-range, nonlinear temporal dependencies, is not limited by kernel size, and does not assume that temporal changes are spatially local or stationary across the image. The TransUNet hybrid architecture is therefore devised in the hopes that it can predict long-term processes such as bar migration, channel shifting, and progressive erosion, something which the standard JamUNet is not able to do.
 
 \subsection{st-Swin-UNet}
-While TransUNet introduces explicit temporal modelling through per-pixel transformers, it faces a fundamental computational challenge: processing each pixel's temporal sequence independently results in very large sequence counts ($H \times W$ sequences of length $T$), requiring chunked processing to avoid memory overflow. This motivates the investigation of window-based self-attention mechanisms, specifically the Swin Transformer architecture \cite{liu2021swin}, which has demonstrated strong performance in hierarchical vision tasks while maintaining computational efficiency through localised attention windows. \\
+TransUNet's per-pixel temporal attention faces computational challenges: processing $H \times W$ independent sequences requires chunked processing to avoid memory overflow. This motivates investigating window-based self-attention, specifically the Swin Transformer architecture \cite{liu2021swin}, which achieves computational efficiency through localised attention windows while maintaining strong performance on hierarchical vision tasks. The st-Swin-UNet (spatio-temporal Swin-UNet) model replaces the entire JamUNet CNN backbone with a Swin Transformer-based U-Net, employing window-based self-attention for both spatial feature extraction and spatio-temporal modelling, inspired by video understanding architectures \cite{liu2022video}. \\
 \\
-The st-Swin-UNet (spatio-temporal Swin-UNet) model replaces the entire JamUNet CNN backbone with a Swin Transformer-based U-Net architecture. Unlike TransUNet, which applies transformers only to the temporal dimension before feeding into a spatial CNN, st-Swin-UNet employs window-based self-attention for both spatial feature extraction and implicit spatio-temporal modelling. This design choice is inspired by recent video understanding architectures \cite{liu2022video}, which show that windowed attention mechanisms can efficiently process spatio-temporal data. \\
+The architecture begins with a spatio-temporal patch embedding module processing input $x \in \mathbb{R}^{B \times T \times H \times W}$. Each temporal frame is embedded separately via a shared convolutional projection (patch size $4 \times 4$), then learnable temporal position embeddings are added to distinguish different years in the sequence. Temporal frames are aggregated using \textit{concat-proj}: concatenating all embeddings and projecting back to the target dimension through a two-layer MLP. \\
 \\
-The architecture begins with a spatio-temporal patch embedding module that processes the input sequence $x \in \mathbb{R}^{B \times T \times H \times W}$. Each temporal frame is embedded separately using a shared convolutional projection layer (patch size $4 \times 4$), producing spatial patches. Crucially, learnable temporal position embeddings are then added to each frame's patch embeddings before temporal aggregation. These temporal position embeddings allow the model to distinguish between different years in the input sequence and learn their relative importance for prediction. The temporal frames are aggregated using a \textit{concat-proj} strategy: all frame embeddings are concatenated and projected back to the target dimension through a two-layer MLP, providing an expressive temporal fusion mechanism. \\
-\\
-Following patch embedding, st-Swin-UNet employs a symmetric encoder-decoder architecture with four hierarchical stages. The encoder progressively downsamples spatial resolution (by factors of 2, 4, 8, 16) while increasing feature dimensionality, using torchvision's \texttt{SwinTransformerBlock} and \texttt{PatchMerging} modules. Each stage contains multiple Swin Transformer blocks with window-based self-attention (window size $8 \times 8$ for tiny variant). Unlike global self-attention, which has quadratic complexity $\mathcal{O}((HW)^2)$, window-based attention computes attention only within non-overlapping local windows, reducing complexity to $\mathcal{O}(HW)$ and making the approach tractable for our $1000 \times 500$ images. Shifted window partitioning between consecutive blocks enables cross-window connections while maintaining efficiency. \\
-\\
-The decoder mirrors the encoder structure, progressively upsampling features through custom \texttt{PatchExpanding} layers (the inverse operation of \texttt{PatchMerging}) and concatenating skip connections from corresponding encoder stages. This U-Net structure with skip connections preserves fine-grained spatial details lost during downsampling, which is critical for accurate pixel-level segmentation of narrow river channels. A final head consisting of two transposed convolutions upsamples the output to the original resolution and produces the binary prediction. A block diagram of the st-Swin-UNet architecture is shown in Figure \ref{fig: StSwinUNet block diagram}.
+Following patch embedding, st-Swin-UNet employs a symmetric encoder-decoder with four hierarchical stages. The encoder downsamples spatial resolution (factors of 2, 4, 8, 16) while increasing dimensionality, using \texttt{SwinTransformerBlock} and \texttt{PatchMerging} modules with window-based self-attention (window size $8 \times 8$). Unlike global attention's $\mathcal{O}((HW)^2)$ complexity, window-based attention computes attention within non-overlapping local windows, reducing complexity to $\mathcal{O}(HW)$. The decoder upsamples through custom \texttt{PatchExpanding} layers with skip connections from encoder stages, preserving spatial details for accurate segmentation. A final head upsamples to original resolution via two transposed convolutions. A block diagram is shown in Figure \ref{fig: StSwinUNet block diagram}.
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}[
@@ -150,13 +146,12 @@ The decoder mirrors the encoder structure, progressively upsampling features thr
     \caption{st-Swin-UNet architecture}
     \label{fig: StSwinUNet block diagram}
 \end{figure}
-\noindent Two model variants were developed: the \textit{tiny} variant (embedding dimension 48, depths [2,2,2,2], $\sim$6.8M parameters) and the \textit{small} variant (embedding dimension 96, depths [2,2,6,2], $\sim$11M parameters). Despite the larger parameter count compared to TransUNet and JamUNet ($\sim$500K), window-based attention makes st-Swin-UNet more memory-efficient than per-pixel temporal transformers, requiring 8--10 GB GPU memory with batch size 8 for the tiny variant. \\
+\noindent Two model variants were developed: \textit{tiny} (embedding dimension 48, depths [2,2,2,2], $\sim$6.8M parameters) and \textit{small} (embedding dimension 96, depths [2,2,6,2], $\sim$41.3M parameters). Despite larger parameter counts than TransUNet and JamUNet ($\sim$500K), window-based attention makes st-Swin-UNet more memory-efficient than per-pixel transformers, requiring 8--10 GB GPU memory (batch size 8, tiny variant). \\
 \\
-To summarise, st-Swin-UNet differs fundamentally from both JamUNet and TransUNet. Unlike JamUNet's shallow 3D convolutions with fixed local receptive fields, st-Swin-UNet employs hierarchical window-based attention that can model both spatial features and temporal patterns through learned position embeddings. Unlike TransUNet's per-pixel temporal attention followed by CNN, st-Swin-UNet replaces the entire backbone with transformers, using window-based attention to achieve computational tractability. The architecture is expected to benefit from the hierarchical feature extraction and global receptive field of transformers while avoiding the memory bottlenecks of global attention, potentially improving predictions of complex morphological patterns spanning multiple spatial scales.
+To summarise, st-Swin-UNet replaces JamUNet's shallow 3D convolutions with hierarchical window-based attention for spatio-temporal modelling through learned position embeddings. Unlike TransUNet's per-pixel temporal transformer followed by CNN, st-Swin-UNet uses a full transformer backbone with windowed attention for computational tractability, potentially improving predictions of complex morphological patterns across multiple spatial scales.
 
 
 \section{Model comparison} \label{section: Model comparison}
-\textcolor{red}{Mention the hyperparameters of the model used in comparison} \\
 This section discusses the results of the newly devised models and compare them to that of the original JamUNet model. The data preprocessing steps and the input-output format is not changed compared to \cite{magherini2024jamunet} ($4$ images input, $1$ image prediction output).
 
 \subsection{TransUNet vs JamUNet}
@@ -186,6 +181,15 @@ To decide which epoch model to choose, we must also study the F1, recall, and pr
 \\
 Compared to the scores of JamUNet, we unfortunately notice that there is no significant improvement of the TransUNet model. We can further reveal the similarity of the two models by plotting the predictions (Figures \ref{fig: TransUNet prediction map} and \ref{fig: JamUNet prediction map}) and misclassification map (\ref{fig: TransUNet vs JamUNet misclassification map}) of model epoch $19$ of TransUNet with model epoch $9$ of JamUNet on a test image of the river. We observe clearly that the misclassification mapping of both models are similar in that they predict the approximate location of the major distributaries. However, the TransUNet model offers almost no advantage when analysing the position of the banks of these distributaries. The number and location of false positives and false negatives are also similar between the two models. We evaluate the possible reasons for this failure in the next section \ref{section: Evaluation}.
 
+\subsection{st-Swin-UNet vs JamUNet}
+We now compare the st-Swin-UNet architecture with the JamUNet baseline. Two model variants were developed: the \textit{tiny} variant (embedding dimension $48$, depths $[2,2,2,2]$, approximately $6.8$ million parameters) and the \textit{small} variant (embedding dimension $96$, depths $[2,2,6,2]$, approximately $41.3$ million parameters). Both variants use $4 \times 4$ patch size, window-based self-attention ($8 \times 8$ windows for tiny, $7 \times 7$ for small), concat-proj temporal aggregation, and $4$ hierarchical encoder/decoder stages. Both variants were trained for $50$ epochs using the same training configuration: learning rate $10^{-4}$, weight decay $0.05$, and binary cross-entropy loss. Following proper evaluation methodology, checkpoints were selected based on validation F1 scores to prevent test set leakage. The validation loss and F1, CSI, precision, and recall scores for both variants are shown in Figures \ref{fig: st-Swin-UNet validation loss} and \ref{fig: st-Swin-UNet validation metrics}. The tiny variant achieved validation F1 $= 0.665$ at epoch $33$, while the small variant achieved validation F1 $= 0.668$ at epoch $14$.
+
+When these best checkpoints were evaluated once on the test set, both variants achieved nearly identical performance: tiny variant (F1 $= 0.7038$, CSI $= 0.5431$, precision $= 66.4\%$, recall $= 74.9\%$) and small variant (F1 $= 0.7044$, CSI $= 0.5438$, precision $= 67.1\%$, recall $= 74.2\%$). This minimal improvement of only $+0.0006$ F1 despite having $6.1\times$ more parameters ($41.3$M vs $6.8$M) suggests the small variant provides no meaningful performance gains, likely due to overfitting on the limited training data. A sample prediction from the small variant is shown in Figure \ref{fig: st-Swin-UNet prediction}. \\
+\\
+We also evaluated both variants with $9$-year temporal input to determine whether extended temporal context improves performance. Contrary to expectations, increasing input years from $4$ to $9$ degraded performance for both variants: tiny dropped from F1 $= 0.7038$ to F1 $= 0.7019$, and small dropped from F1 $= 0.7044$ to F1 $= 0.6976$. This suggests that the window-based attention mechanism struggles to effectively leverage extended temporal sequences, possibly due to increased noise or training difficulty. \\
+\\
+Comparing st-Swin-UNet with JamUNet (F1 $= 0.722$), we observe a $2.4$--$2.5\%$ performance gap (tiny: $2.5\%$, small: $2.4\%$). While st-Swin-UNet (best: F1 $= 0.7044$) outperforms TransUNet (F1 $= 0.691$) by $1.9\%$, it still falls short of the simple CNN baseline. The window-based attention mechanism successfully addresses the memory efficiency issues of TransUNet's per-pixel temporal attention, allowing for larger models ($41.3$M parameters vs $500$K), yet this architectural sophistication does not translate to improved prediction accuracy. The hierarchical feature extraction and learnable temporal position embeddings capture spatial patterns effectively, as evidenced by comparable accuracy ($92.8\%$ vs $93.5\%$), but struggle with precise boundary delineation, resulting in lower precision ($67.1\%$ vs $75.3\%$) and recall ($74.2\%$ vs $77.0\%$) compared to JamUNet.
+
 
 \section{Evaluation} \label{section: Evaluation}
 \textcolor{red}{
@@ -199,8 +203,11 @@ Neither TransUNet nor st-Swin-UNet yields noticeable improvements over the JamUN
     \item There is insufficient annual data to leverage the transformer fully. We used the same training data as in \cite{magherini2024jamunet}, i.e., approximately $700$ images spanning $30$ years, each with $1000 \times 500$ pixels, which may not be sufficient for a transformer to perform well. For small datasets, the TransUNet training process may be dominated by the CNN component, with the transformer component serving a minimal role. It is even possible that transformer models hinders the prediction accuracy compared to CNNs for small datasets \cite{akkaya2024enhancing}.
     \item Braided rivers are inherently hard to predict, and this difficulty is compounded by the fact that we were only able to use a limited time period each year (January to April) for input satellite images due to cloud cover in other months. As braided rivers can change substantially over time, even on the timescale of a year, due to flood seasons (June to September for the Brahmaputra River), the lack of data in the other months could significantly hinder the accuracy of any machine learning model.
 \end{itemize}
-For the TransUNet architecture, we also tried increasing the input years from $4$ to $9$, in the hope that a longer temporal sequence would yield better results than for JamUNet. Appendix \ref{appendix: TransUNet 9 years} describes the models chosen. In brief, the structure of the TransUNet model seemed more refined than that of JamUNet, showing that a longer input sequence benefits the transformer. However, the F1, recall, and precision scores were similar, likely due to the same lack-of-data reasons mentioned. 
-\textcolor{red}{Mention which newly developed model performed overall better and explain possible reasons}
+For the TransUNet architecture, we also tried increasing the input years from $4$ to $9$, in the hope that a longer temporal sequence would yield better results than for JamUNet. Appendix \ref{appendix: TransUNet 9 years} describes the models chosen. In brief, the structure of the TransUNet model seemed more refined than that of JamUNet, showing that a longer input sequence benefits the transformer. However, the F1, recall, and precision scores were similar, likely due to the same lack-of-data reasons mentioned. \\
+\\
+We also evaluated both st-Swin-UNet variants with $9$-year temporal input to determine whether extended temporal context improves performance. Contrary to expectations, increasing input years from $4$ to $9$ \textbf{degraded performance} for both variants: tiny dropped from F1 $= 0.7038$ to F1 $= 0.7019$ (epoch $20$), and small dropped from F1 $= 0.7044$ to F1 $= 0.6976$ (epoch $30$). This $0.27\%$ decrease for tiny and $0.96\%$ decrease for small suggests that the model struggles to effectively leverage extended temporal context, possibly due to increased noise or training difficulty with longer sequences. This finding contrasts with TransUNet and JamUNet, where $9$-year input provided slight improvements, highlighting a limitation of the window-based attention mechanism when processing extended temporal sequences. \\
+\\
+Between the two transformer-based models, st-Swin-UNet (best: F1 $= 0.7044$, small variant with $4$-year input) performs better than TransUNet (F1 $= 0.691$) by $1.9\%$. This improvement can be attributed to window-based self-attention being more suitable for spatial feature extraction than per-pixel temporal attention followed by CNN. The hierarchical architecture of st-Swin-UNet with learnable temporal position embeddings provides better spatio-temporal representation learning compared to TransUNet's linear projection bottleneck. However, both models remain fundamentally limited by insufficient training data, preventing either from surpassing the simple CNN baseline
 
 
 \section{Limitations and outlook} \label{section: Limitations and outlook}
@@ -208,8 +215,8 @@ This section discusses known issues of the machine learning models trained as we
 \begin{itemize}
     \item \textbf{Platform dependency of the current implementation.} \\
     The current version of the training and evaluation \href{https://github.com/Romultra/River-Morpho-ML.git}{codebase} is primarily developed and tested on a Windows environment as a result of legacy implementation from \cite{magherini2024jamunet}. While this setup proved stable and functional for the experiments conducted in this work, it limits portability and reproducibility across other operating systems, notably macOS and Linux-based high-performance computing (HPC) clusters, which are commonly used for large-scale machine learning workloads. Future work should focus on improving cross-platform compatibility.
-    \item \textbf{High GPU memory requirements.} \\
-    The newly developed model architectures exhibit substantial GPU memory demands. For both models, at least 13 GB of VRAM is required during training, limiting experimentation to high-end GPUs and constraining model parameters (e.g., batch size, number of attention heads). Note that VRAM usage is determined by the model architecture and parameters, and does not increase with the total number of images used to train the model. Therefore, training the model on more data would not necessitate more VRAM. Nevertheless, future work could explore memory-efficient alternatives, notably lighter temporal modelling approaches, to make the method more accessible and computationally efficient for small datasets.
+    \item \textbf{GPU memory requirements vary by architecture.} \\
+    The transformer-based models have different memory characteristics: TransUNet requires moderate GPU memory similar to JamUNet, while st-Swin-UNet exhibits higher demands ranging from $8$--$10$ GB (tiny variant, batch size $8$) to $\sim$13 GB (small variant, batch size $4$). This limits experimentation with larger batch sizes and constrains deployment on consumer-grade GPUs. Window-based attention in st-Swin-UNet is more memory-efficient than per-pixel temporal attention, but larger models still require high-end hardware. Note that VRAM usage is determined by model architecture and batch size, not dataset size. Future work could explore memory-efficient alternatives such as gradient checkpointing or mixed-precision training to improve accessibility.
     \item \textbf{Lack of benchmarking against physics-based simulations.} \\
     The performance of the proposed deep learning models is evaluated solely against observational ground truth derived from satellite imagery. While this provides a meaningful data-driven assessment, the absence of a direct comparison with physics-based river-morphology simulations limits physical interpretability. An important direction for future work is to benchmark model predictions against outputs from established hydrodynamic and sediment transport models, thereby enabling a more rigorous assessment of whether the learned patterns are physically consistent.
     \item \textbf{Limited generalization across river systems.} \\
@@ -305,7 +312,48 @@ We observe clearly that the TransUNet model offers a slightly higher resolution 
     \label{fig: TransUNet vs JamUNet misclassification map}
 \end{figure}
 
-\textcolor{red}{ADD SIMILAR PLOTS FOR SWIN-UNET}
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.4\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/val_loss_stswin_tiny_4y.png}
+        \caption{st-Swin-UNet Tiny}
+        \label{subfig: st-Swin-UNet tiny validation loss}
+    \end{subfigure}
+    \begin{subfigure}[b]{0.4\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/val_loss_stswin_small_4y.png}
+        \caption{st-Swin-UNet Small}
+        \label{subfig: st-Swin-UNet small validation loss}
+    \end{subfigure}
+    \caption{Validation loss vs epoch for st-Swin-UNet variants ($4$-year input).}
+    \label{fig: st-Swin-UNet validation loss}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.4\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/val_metrics_stswin_tiny_4y.png}
+        \caption{st-Swin-UNet Tiny}
+        \label{subfig: st-Swin-UNet tiny validation metrics}
+    \end{subfigure}
+    \begin{subfigure}[b]{0.4\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/val_metrics_stswin_small_4y.png}
+        \caption{st-Swin-UNet Small}
+        \label{subfig: st-Swin-UNet small validation metrics}
+    \end{subfigure}
+    \caption{F1, CSI, precision, and recall scores comparison for st-Swin-UNet variants ($4$-year input). Best checkpoints: tiny at epoch $33$ (F1 $= 0.665$), small at epoch $14$ (F1 $= 0.668$).}
+    \label{fig: st-Swin-UNet validation metrics}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\linewidth]{figures/prediction_stswin_small_4y_sample001.png}
+    \caption{st-Swin-UNet small variant prediction on test set (epoch $14$, $4$-year input).}
+    \label{fig: st-Swin-UNet prediction}
+\end{figure}
 
 \begin{figure}[H]
     \centering
