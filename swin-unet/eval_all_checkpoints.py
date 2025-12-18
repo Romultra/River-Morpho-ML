@@ -82,22 +82,23 @@ def parse_args():
     parser.add_argument(
         "--checkpoint-dir",
         type=str,
-        default=str(eval_cfg.checkpoint_dir),
+        default=None,
         help="Directory containing checkpoint .pt files "
-             f"(default: {eval_cfg.checkpoint_dir}).",
+             "(default: auto-generated based on variant).",
     )
     parser.add_argument(
         "--checkpoint-pattern",
         type=str,
-        default=eval_cfg.checkpoint_pattern,
+        default=None,
         help="Glob pattern to match checkpoint files "
-             f"(default: {eval_cfg.checkpoint_pattern}).",
+             "(default: auto-generated based on variant).",
     )
     parser.add_argument(
         "--output-csv",
         type=str,
-        default=str(eval_cfg.scores_csv),
-        help="Path to output CSV file with metrics per epoch.",
+        default=None,
+        help="Path to output CSV file with metrics per epoch "
+             "(default: auto-generated based on variant).",
     )
     parser.add_argument(
         "--cpu",
@@ -177,6 +178,17 @@ def create_model(variant: str, temporal_aggregation: str, in_chans: int):
 
 def main():
     args = parse_args()
+
+    # Update eval config for the specified variant
+    eval_cfg.update_for_variant(args.variant)
+
+    # Use variant-specific defaults if not specified
+    if args.checkpoint_dir is None:
+        args.checkpoint_dir = str(eval_cfg.checkpoint_dir)
+    if args.checkpoint_pattern is None:
+        args.checkpoint_pattern = eval_cfg.checkpoint_pattern
+    if args.output_csv is None:
+        args.output_csv = str(eval_cfg.scores_csv)
 
     # -----------------------
     # 1. Find checkpoints

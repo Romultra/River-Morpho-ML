@@ -114,7 +114,7 @@ def create_model(variant: str, temporal_aggregation: str, in_chans: int):
 
 
 def visualize_prediction(input_seq, target, prediction, threshold=0.5,
-                         sample_idx=0, save_path=None):
+                         sample_idx=0, save_path=None, variant=None):
     """
     Create a comprehensive visualization of model prediction.
 
@@ -125,6 +125,7 @@ def visualize_prediction(input_seq, target, prediction, threshold=0.5,
         threshold: classification threshold
         sample_idx: sample number for title
         save_path: path to save figure
+        variant: model variant name for title (e.g., "tiny" or "small")
     """
     T, H, W = input_seq.shape
 
@@ -184,7 +185,8 @@ def visualize_prediction(input_seq, target, prediction, threshold=0.5,
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
     # Overall title
-    fig.suptitle(f'Sample {sample_idx + 1} - st-Swin-UNet Prediction Visualization',
+    variant_str = f" ({variant})" if variant else ""
+    fig.suptitle(f'Sample {sample_idx + 1} - st-Swin-UNet{variant_str} Prediction Visualization',
                  fontsize=16, fontweight='bold', y=0.98)
 
     plt.tight_layout(rect=[0, 0, 1, 0.96])
@@ -295,6 +297,7 @@ def main():
 
     # Visualize predictions
     print(f"\nGenerating visualizations for {args.num_samples} samples...")
+    print(f"Model variant: {args.variant}")
     print(f"Threshold: {args.threshold}")
     print(f"Output directory: {output_dir}")
 
@@ -328,15 +331,16 @@ def main():
             print(f"  F1: {metrics['f1']:.4f}")
             print(f"  IoU/CSI: {metrics['iou']:.4f}")
 
-            # Create visualization
-            save_path = output_dir / f"prediction_sample_{idx + 1:03d}.png"
+            # Create visualization with variant in filename
+            save_path = output_dir / f"prediction_{args.variant}_{args.split}_sample_{idx + 1:03d}.png"
             visualize_prediction(
                 input_np,
                 target_np,
                 pred_np,
                 threshold=args.threshold,
                 sample_idx=idx,
-                save_path=save_path
+                save_path=save_path,
+                variant=args.variant
             )
             plt.close()  # Close to save memory
 

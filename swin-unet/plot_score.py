@@ -20,8 +20,14 @@ Usage example (from repo root)
 ------------------------------
     conda activate braided
 
-    # Assuming eval_all_checkpoints.py has already written eval_cfg.scores_csv
+    # Plot for tiny variant (default)
     python -m swin-unet.plot_score
+
+    # Plot for small variant
+    python -m swin-unet.plot_score --variant small
+
+    # Use custom CSV path
+    python -m swin-unet.plot_score --csv-path swin-unet/scores/custom_metrics.csv
 
 Outputs
 -------
@@ -41,6 +47,7 @@ Outputs
         data_cfg.plots_dir / "test_f1_csi_stswin_{variant}.png"
 """
 
+import argparse
 import sys
 from pathlib import Path
 import pandas as pd
@@ -50,15 +57,48 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, str(Path(__file__).parent))
 from config import data_cfg, eval_cfg, model_cfg
 
-# Path to CSV with metrics for all epochs (from config)
-csv_path = eval_cfg.scores_csv
 
-# Directory where plots will be saved (from config)
-plots_dir = data_cfg.plots_dir
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Plot test metrics from CSV and identify best epochs."
+    )
+    parser.add_argument(
+        "--variant",
+        type=str,
+        default=model_cfg.variant,
+        choices=["tiny", "small"],
+        help=f"Model variant to plot (default: {model_cfg.variant})",
+    )
+    parser.add_argument(
+        "--csv-path",
+        type=str,
+        default=None,
+        help="Path to metrics CSV file (default: auto-generated based on variant)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=str(data_cfg.plots_dir),
+        help=f"Directory to save plots (default: {data_cfg.plots_dir})",
+    )
+    return parser.parse_args()
+
+
+# Parse arguments
+args = parse_args()
+
+# Update eval config for the specified variant
+eval_cfg.update_for_variant(args.variant)
+
+# Path to CSV with metrics for all epochs
+csv_path = args.csv_path if args.csv_path else eval_cfg.scores_csv
+
+# Directory where plots will be saved
+plots_dir = Path(args.output_dir)
 plots_dir.mkdir(parents=True, exist_ok=True)
 
 # Model identifier for titles / filenames
-model_name = f"stswin_{model_cfg.variant}"  # e.g. "stswin_tiny" or "stswin_small"
+model_name = f"stswin_{args.variant}"  # e.g. "stswin_tiny" or "stswin_small"
 
 # Load metrics
 print(f"Loading metrics from {csv_path}")
@@ -141,7 +181,7 @@ fig_loss = plt.figure(figsize=(10, 6))
 plt.plot(df["epoch"], df["test_loss"], marker="o", linewidth=2, markersize=6)
 plt.xlabel("Epoch", fontsize=12)
 plt.ylabel("Test Loss", fontsize=12)
-plt.title(f"Test Loss vs Epoch (st-Swin-UNet {model_cfg.variant})", fontsize=14, fontweight="bold")
+plt.title(f"Test Loss vs Epoch (st-Swin-UNet {args.variant})", fontsize=14, fontweight="bold")
 plt.grid(True, alpha=0.3)
 
 loss_plot_path = plots_dir / f"test_loss_{model_name}.png"
@@ -156,7 +196,7 @@ plt.plot(df["epoch"], df["test_f1"], marker="o", linewidth=2, markersize=6, labe
 plt.plot(df["epoch"], df["test_csi"], marker="s", linewidth=2, markersize=6, label="CSI")
 plt.xlabel("Epoch", fontsize=12)
 plt.ylabel("Score", fontsize=12)
-plt.title(f"F1 and CSI vs Epoch (st-Swin-UNet {model_cfg.variant})", fontsize=14, fontweight="bold")
+plt.title(f"F1 and CSI vs Epoch (st-Swin-UNet {args.variant})", fontsize=14, fontweight="bold")
 plt.legend(fontsize=11)
 plt.grid(True, alpha=0.3)
 

@@ -8,7 +8,7 @@ from typing import Optional
 @dataclass
 class DataConfig:
     # Temporal setup
-    year_target: int = 10
+    year_target: int = 5  # 4 input years + 1 target year (matches original thesis model)
 
     # Dataset paths
     dir_folders: str = "data/satellite/dataset_month3"
@@ -67,8 +67,8 @@ class TrainConfig:
     loss_f: str = "BCE"  # Options: "BCE", "BCE_Logits", "Focal"
     physics: bool = False  # Physics-based loss terms
 
-    # Checkpoint management
-    ckpt_dir: Path = Path("swin-unet/checkpoints")
+    # Checkpoint management (will be updated based on variant)
+    ckpt_dir: Path = Path("swin-unet/checkpoints_tiny")
     save_every_n_epochs: int = 1
 
     # Learning rate scheduling (optional)
@@ -79,10 +79,17 @@ class TrainConfig:
 
 @dataclass
 class EvalConfig:
-    # Pattern for evaluating checkpoints (will be updated based on variant)
+    # These will be updated based on model variant
+    # Default to tiny, but should be updated when variant changes
     checkpoint_pattern: str = "stswin_tiny_epoch*.pt"
-    checkpoint_dir: Path = Path("swin-unet/checkpoints")
+    checkpoint_dir: Path = Path("swin-unet/checkpoints_tiny")
     scores_csv: Path = Path("swin-unet/scores/test_metrics_all_epochs_stswin_tiny.csv")
+
+    def update_for_variant(self, variant: str):
+        """Update paths based on model variant."""
+        self.checkpoint_pattern = f"stswin_{variant}_epoch*.pt"
+        self.checkpoint_dir = Path(f"swin-unet/checkpoints_{variant}")
+        self.scores_csv = Path(f"swin-unet/scores/test_metrics_all_epochs_stswin_{variant}.csv")
 
 
 # Single global instances you can import everywhere

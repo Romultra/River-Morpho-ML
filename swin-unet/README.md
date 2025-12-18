@@ -34,18 +34,32 @@ python -m swin-unet.train --variant small --batch-size 4
 
 **Evaluate Best Checkpoint:**
 ```bash
+# Evaluate tiny variant (default)
 python -m swin-unet.eval_all_checkpoints
+
+# Evaluate small variant
+python -m swin-unet.eval_all_checkpoints --variant small
 ```
 
 **Visualize Predictions:**
 ```bash
+# Visualize tiny variant predictions
 python -m swin-unet.visualize_predictions \
     --checkpoint swin-unet/checkpoints_tiny/stswin_tiny_epoch042.pt
+
+# Visualize small variant predictions
+python -m swin-unet.visualize_predictions \
+    --checkpoint swin-unet/checkpoints_small/stswin_small_epoch042.pt \
+    --variant small
 ```
 
 **Plot Metrics:**
 ```bash
+# Plot tiny variant metrics (default)
 python -m swin-unet.plot_score
+
+# Plot small variant metrics
+python -m swin-unet.plot_score --variant small
 ```
 
 ---
@@ -108,32 +122,51 @@ This will:
 After training, evaluate all saved checkpoints on the test set:
 
 ```bash
+# Evaluate tiny variant (default)
 python -m swin-unet.eval_all_checkpoints
+
+# Evaluate small variant
+python -m swin-unet.eval_all_checkpoints --variant small
 ```
 
 This generates a CSV file at `swin-unet/scores/test_metrics_all_epochs_stswin_{variant}.csv` with metrics for each epoch.
+
+**Important:** The script automatically uses the correct checkpoint directory and output paths based on the `--variant` argument. Tiny and small model checkpoints are kept completely separate.
 
 ### 4. Visualize Metrics
 
 Create plots and find the best-performing epoch:
 
 ```bash
+# Plot tiny variant metrics (default)
 python -m swin-unet.plot_score
+
+# Plot small variant metrics
+python -m swin-unet.plot_score --variant small
 ```
 
 This will:
 - Print best epochs for each metric (F1, CSI, loss, etc.)
 - Save summary CSV to `swin-unet/plots/best_epoch_summary_stswin_{variant}.csv`
 - Generate plots: loss vs epoch, F1/CSI vs epoch
-- Save plots to `swin-unet/plots/`
+- Save plots to `swin-unet/plots/` with variant-specific filenames
+
+**Important:** The script automatically reads the correct CSV file based on the `--variant` argument. Plots for tiny and small models are saved with different filenames to prevent overwriting.
 
 ### 5. Visualize Predictions
 
 See actual model predictions on test samples:
 
 ```bash
+# Visualize tiny variant predictions
 python -m swin-unet.visualize_predictions \
-    --checkpoint swin-unet/checkpoints/stswin_tiny_epoch042.pt \
+    --checkpoint swin-unet/checkpoints_tiny/stswin_tiny_epoch042.pt \
+    --num-samples 5
+
+# Visualize small variant predictions
+python -m swin-unet.visualize_predictions \
+    --checkpoint swin-unet/checkpoints_small/stswin_small_epoch042.pt \
+    --variant small \
     --num-samples 5
 ```
 
@@ -145,8 +178,240 @@ This will:
   - Ground truth target
   - Model prediction (probabilities and binary)
   - Error map highlighting incorrect pixels
-- Save high-resolution images to `swin-unet/plots/`
+- Save high-resolution images to `swin-unet/plots/` with variant-specific filenames
 - Print per-sample metrics (accuracy, precision, recall, F1, IoU)
+
+**Important:** The `--variant` argument ensures that visualization filenames include the model variant (e.g., `prediction_tiny_test_sample_001.png` vs `prediction_small_test_sample_001.png`) to prevent overwriting when comparing models.
+
+---
+
+## Managing Tiny and Small Variants Separately
+
+All scripts now properly handle tiny and small model variants as completely separate entities. This allows you to train, evaluate, and compare both variants simultaneously without any risk of overwriting data.
+
+### Automatic Variant-Specific Paths
+
+When you specify `--variant tiny` or `--variant small`, each script automatically uses the correct paths:
+
+| Component | Tiny Variant | Small Variant |
+|-----------|--------------|---------------|
+| **Checkpoints** | `checkpoints_tiny/stswin_tiny_epoch*.pt` | `checkpoints_small/stswin_small_epoch*.pt` |
+| **Evaluation CSV** | `scores/test_metrics_all_epochs_stswin_tiny.csv` | `scores/test_metrics_all_epochs_stswin_small.csv` |
+| **Plot files** | `plots/test_loss_stswin_tiny.png` | `plots/test_loss_stswin_small.png` |
+| **Visualizations** | `plots/prediction_tiny_test_sample_*.png` | `plots/prediction_small_test_sample_*.png` |
+
+### Complete Workflow for Both Variants
+
+```bash
+# Train both variants
+python -m swin-unet.train --variant tiny --epochs 50
+python -m swin-unet.train --variant small --batch-size 4 --epochs 50
+
+# Evaluate both variants
+python -m swin-unet.eval_all_checkpoints --variant tiny
+python -m swin-unet.eval_all_checkpoints --variant small
+
+# Plot metrics for both
+python -m swin-unet.plot_score --variant tiny
+python -m swin-unet.plot_score --variant small
+
+# Visualize predictions from both
+python -m swin-unet.visualize_predictions \
+    --checkpoint swin-unet/checkpoints_tiny/stswin_tiny_epoch042.pt \
+    --variant tiny
+
+python -m swin-unet.visualize_predictions \
+    --checkpoint swin-unet/checkpoints_small/stswin_small_epoch042.pt \
+    --variant small
+```
+
+All outputs will be stored in separate locations, making it easy to compare the performance of the two variants side-by-side.
+
+---
+
+## Model Architecture
+
+### Overview
+
+st-Swin-UNet is a U-Net style encoder-decoder architecture built on Swin Transformer blocks instead of convolutional layers. It processes temporal satellite imagery sequences to predict future water/land distribution.
+
+```
+Input: (B, T, H, W)     T temporal frames of satellite images
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│   Spatio-Temporal Patch Embedding       │  ← Learnable temporal position embeddings
+│   (B, T, H, W) → (B, H/4, W/4, 48)      │    Temporal aggregation (concat_proj)
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│            ENCODER                       │
+│  ┌─────────────────────────────────┐    │
+│  │ Stage 1: BasicLayer (dim=48)    │────┼──► Skip 1
+│  │ 2× SwinTransformerBlock         │    │
+│  └─────────────────────────────────┘    │
+│              │ PatchMerging (↓2×)        │
+│              ▼                           │
+│  ┌─────────────────────────────────┐    │
+│  │ Stage 2: BasicLayer (dim=96)    │────┼──► Skip 2
+│  │ 2× SwinTransformerBlock         │    │
+│  └─────────────────────────────────┘    │
+│              │ PatchMerging (↓2×)        │
+│              ▼                           │
+│  ┌─────────────────────────────────┐    │
+│  │ Stage 3: BasicLayer (dim=192)   │────┼──► Skip 3
+│  │ 2× SwinTransformerBlock         │    │
+│  └─────────────────────────────────┘    │
+│              │ PatchMerging (↓2×)        │
+│              ▼                           │
+│  ┌─────────────────────────────────┐    │
+│  │ Stage 4: BasicLayer (dim=384)   │    │  ← Bottleneck
+│  │ 2× SwinTransformerBlock         │    │
+│  └─────────────────────────────────┘    │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│            DECODER                       │
+│  ┌─────────────────────────────────┐    │
+│  │ PatchExpanding (↑2×)            │◄───┼── Skip 3
+│  │ Skip Fusion + BasicLayer        │    │
+│  └─────────────────────────────────┘    │
+│              │                           │
+│              ▼                           │
+│  ┌─────────────────────────────────┐    │
+│  │ PatchExpanding (↑2×)            │◄───┼── Skip 2
+│  │ Skip Fusion + BasicLayer        │    │
+│  └─────────────────────────────────┘    │
+│              │                           │
+│              ▼                           │
+│  ┌─────────────────────────────────┐    │
+│  │ PatchExpanding (↑2×)            │◄───┼── Skip 1
+│  │ Skip Fusion + BasicLayer        │    │
+│  └─────────────────────────────────┘    │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│          Final Head                      │
+│  ConvTranspose2d (↑2×) → ConvT (↑2×)    │
+│  → Conv2d (1×1) → Sigmoid               │
+└─────────────────────────────────────────┘
+         │
+         ▼
+Output: (B, 1, H, W)    Binary segmentation mask
+```
+
+### Key Components
+
+#### 1. Spatio-Temporal Patch Embedding (`SpatioTemporalPatchEmbed`)
+
+Handles the temporal dimension of input satellite imagery:
+
+```python
+Input:  (B, T, H, W)           # T yearly frames
+Output: (B, H/4, W/4, embed_dim)  # Spatially downsampled, temporally aggregated
+```
+
+**How it works:**
+1. Each temporal frame is embedded separately using a shared Conv2d projection
+2. Learnable temporal position embeddings are added to each frame
+3. Frames are aggregated using one of three strategies:
+   - `concat_proj`: Concatenate all frames, project back to embed_dim (most expressive)
+   - `learned_weighted_sum`: Learn scalar weights per frame
+   - `mean`: Simple average (baseline)
+
+#### 2. Swin Transformer Blocks
+
+Uses torchvision's `SwinTransformerBlock` with **window-based self-attention**:
+
+- Attention computed in local windows (e.g., 8×8 patches)
+- Alternating blocks use **shifted windows** for cross-window connections
+- Much more memory efficient than global attention
+
+```python
+# Window attention: O(H*W * window_size²) instead of O((H*W)²)
+# For 1000×500 image with 8×8 windows: 500K × 64 vs 500K × 500K operations
+```
+
+#### 3. PatchMerging (Encoder Downsampling)
+
+Reduces spatial resolution by 2× while doubling channels:
+```python
+Input:  (B, H, W, C)
+Output: (B, H/2, W/2, 2C)
+```
+Concatenates 2×2 neighboring patches and projects to 2C dimensions.
+
+#### 4. PatchExpanding (Decoder Upsampling)
+
+Inverse of PatchMerging - increases resolution by 2×, halves channels:
+```python
+Input:  (B, H, W, C)
+Output: (B, 2H, 2W, C/2)
+```
+
+#### 5. Skip Connections
+
+Encoder features are concatenated with decoder features at matching resolutions:
+```python
+x = torch.cat([upsampled, skip], dim=-1)  # Concatenate along channel dim
+x = skip_fusion(x)  # Linear projection back to expected dim
+```
+
+### Memory Efficiency: Why Swin-UNet Uses Less VRAM
+
+Despite having **14× more parameters** than TransformerUNet (6.8M vs 500K), st-Swin-UNet uses significantly less GPU memory:
+
+| Model | Parameters | Batch Size | VRAM Usage |
+|-------|------------|------------|------------|
+| TransformerUNet | 500K | 1 | >12 GB |
+| st-Swin-UNet (tiny) | 6.8M | 8 | ~12 GB |
+
+**The reason: Activation memory, not parameter count**
+
+**TransformerUNet's bottleneck:**
+```python
+# TemporalTransformerBlock processes EVERY PIXEL as a separate sequence
+x = x.reshape(B * H * W, T, 1)  # 1 × 1000 × 500 = 500,000 sequences!
+x = self.encoder(x)  # Each stores Q, K, V, attention scores for backprop
+```
+
+For a 1000×500 image, this creates **500,000 separate transformer sequences**, each storing intermediate activations for backpropagation.
+
+**st-Swin-UNet's efficiency:**
+```python
+# Window-based attention: only 8×8 = 64 tokens per window
+# Attention is local, not global
+# Feature maps shrink through encoder (1000×500 → 250×125 → 125×62 → ...)
+```
+
+| Aspect | TransformerUNet | st-Swin-UNet |
+|--------|-----------------|--------------|
+| Attention scope | 500K separate pixel sequences | 64 tokens per 8×8 window |
+| Spatial processing | Full resolution in transformer | Hierarchical (resolution shrinks) |
+| Activation storage | Massive (all pixel sequences) | Small (window-based, shared) |
+
+### Dimension Flow (Tiny Variant)
+
+For input shape `(B, 4, 1000, 500)` with 4 temporal frames:
+
+| Stage | Output Shape | Channels |
+|-------|--------------|----------|
+| Input | (B, 4, 1000, 500) | 4 |
+| Patch Embed | (B, 250, 125, 48) | 48 |
+| Encoder Stage 1 | (B, 250, 125, 48) | 48 |
+| After PatchMerging | (B, 125, 62, 96) | 96 |
+| Encoder Stage 2 | (B, 125, 62, 96) | 96 |
+| After PatchMerging | (B, 62, 31, 192) | 192 |
+| Encoder Stage 3 | (B, 62, 31, 192) | 192 |
+| After PatchMerging | (B, 31, 15, 384) | 384 |
+| Encoder Stage 4 (Bottleneck) | (B, 31, 15, 384) | 384 |
+| Decoder Stage 1 | (B, 62, 31, 192) | 192 |
+| Decoder Stage 2 | (B, 125, 62, 96) | 96 |
+| Decoder Stage 3 | (B, 250, 125, 48) | 48 |
+| Final Head | (B, 1, 1000, 500) | 1 |
 
 ## Model Variants
 
@@ -211,7 +476,7 @@ model_cfg.temporal_aggregation = "concat_proj"  # or "learned_weighted_sum", "me
 
 ### Data Configuration (`DataConfig`)
 ```python
-year_target = 10           # Temporal sequence: 4 input years + 1 target
+year_target = 5            # Temporal sequence: 4 input years + 1 target
 dir_folders = "data/satellite/dataset_month3"
 batch_size = 8             # Reduced for larger model
 num_workers = 12           # Parallel data loading workers
@@ -349,10 +614,10 @@ The `visualize_predictions.py` script creates comprehensive visualizations of mo
 Each visualization shows **2 rows × 4 columns**:
 
 **Row 1: Input Temporal Sequence**
-- Column 1: First input frame (year 1 of 9)
-- Column 2: Middle input frame (year 5 of 9)
-- Column 3: Last input frame (year 9 of 9)
-- Column 4: Temporal mean across all 9 frames
+- Column 1: First input frame (year 1 of 4)
+- Column 2: Middle input frame (year 2 of 4)
+- Column 3: Last input frame (year 4 of 4)
+- Column 4: Temporal mean across all 4 frames
 
 **Row 2: Predictions & Analysis**
 - Column 1: Ground truth target (actual water distribution)
@@ -447,18 +712,34 @@ swin-unet/
 │   ├── dataset_month3_training.pt     (6.3 GB)
 │   ├── dataset_month3_validation.pt   (229 MB)
 │   └── dataset_month3_testing.pt      (229 MB)
-├── checkpoints/                # Model checkpoints (27 MB each)
+├── checkpoints_tiny/           # Tiny variant checkpoints (27 MB each)
 │   ├── stswin_tiny_epoch001.pt
 │   ├── stswin_tiny_epoch002.pt
 │   └── ... (up to epoch 050)
+├── checkpoints_small/          # Small variant checkpoints (44 MB each)
+│   ├── stswin_small_epoch001.pt
+│   ├── stswin_small_epoch002.pt
+│   └── ... (up to epoch 050)
 ├── plots/                      # Visualization outputs
 │   ├── test_loss_stswin_tiny.png
+│   ├── test_loss_stswin_small.png
 │   ├── test_f1_csi_stswin_tiny.png
+│   ├── test_f1_csi_stswin_small.png
 │   ├── best_epoch_summary_stswin_tiny.csv
-│   └── prediction_sample_*.png (prediction visualizations)
+│   ├── best_epoch_summary_stswin_small.csv
+│   ├── prediction_tiny_test_sample_001.png
+│   ├── prediction_small_test_sample_001.png
+│   └── ... (prediction visualizations)
 └── scores/                     # Evaluation CSVs
-    └── test_metrics_all_epochs_stswin_tiny.csv
+    ├── test_metrics_all_epochs_stswin_tiny.csv
+    └── test_metrics_all_epochs_stswin_small.csv
 ```
+
+**Important:** Checkpoints, evaluation results, and visualizations for tiny and small variants are now completely separated to prevent any accidental overwriting. Each variant has its own:
+- Checkpoint directory: `checkpoints_{variant}/`
+- Evaluation CSV: `scores/test_metrics_all_epochs_stswin_{variant}.csv`
+- Plot files with variant in filename: `test_loss_stswin_{variant}.png`
+- Prediction visualizations: `prediction_{variant}_{split}_sample_*.png`
 
 ## Code Reuse
 
@@ -479,14 +760,21 @@ This ensures:
 | Aspect | TransformerUNet | st-Swin-UNet (Tiny) |
 |--------|----------------|---------------------|
 | Backbone | CNN (U-Net) | Vision Transformer (Swin) |
-| Temporal handling | Temporal Transformer (optional) | Spatio-temporal patch embedding |
+| Temporal handling | Per-pixel temporal transformer | Spatio-temporal patch embedding |
 | Parameters | ~500K | 6.8M |
-| Receptive field | Local (convolutions) | Global (attention) |
-| Memory (batch=8) | ~4-6 GB | ~8-10 GB |
+| Attention scope | Global (per pixel across time) | Local (8×8 windows) |
+| Memory (batch=1) | >12 GB | ~2 GB |
+| Memory (batch=8) | OOM | ~12 GB |
 | Training Speed (RTX 4090) | ~30 sec/epoch | ~1-2 min/epoch |
 | **F1 Score** | ~0.60-0.70 (est.) | **0.697** (verified) |
 | **Accuracy** | ~85-90% (est.) | **93%** (verified) |
 | Checkpoint Size | ~2 MB | 27 MB |
+
+**Why st-Swin-UNet uses less memory despite 14× more parameters:**
+
+TransformerUNet's `TemporalTransformerBlock` reshapes input to `(B×H×W, T, 1)`, creating 500,000 separate sequences for a 1000×500 image. Each sequence stores activations (Q, K, V, attention scores) for backpropagation, consuming massive GPU memory.
+
+st-Swin-UNet uses window-based attention (64 tokens per window) and hierarchical feature maps that shrink through the encoder, dramatically reducing activation memory. See [Memory Efficiency](#memory-efficiency-why-swin-unet-uses-less-vram) for details.
 
 ## Troubleshooting
 
