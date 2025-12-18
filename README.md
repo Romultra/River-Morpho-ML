@@ -132,6 +132,7 @@ JamUNet code, it is advised to use the code only on Windows operating system.
 ### Training Models
 
 **1. TransformerUNet**
+
 All TransformerUNet (TransUNet) files are located within the `transformer_cnn_model/` directory. To configure any parameter of
 the model, the user should modify parameter values within `transformer_cnn_model/config.py`. After modification, the pipeline below
 shows the training and score plotting process in chronological order.
