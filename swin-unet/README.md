@@ -14,13 +14,32 @@ st-Swin-UNet is a Swin Transformer-based U-Net architecture for binary segmentat
 - Efficient caching system for fast iteration
 - Comprehensive visualization tools for predictions
 
-**Achieved Performance (Tiny Variant):**
-- **Best F1 Score:** 0.697 at epoch 42
-- **Best CSI:** ~0.53
-- **Accuracy:** ~93%
-- **Training on RTX 4090:** ~1-2 min/epoch
+**Achieved Performance (4-year input):**
+- **Tiny Variant:** F1 = 0.7038, CSI = 0.5431 (epoch 33, validation-selected)
+- **Small Variant:** F1 = 0.7044, CSI = 0.5438 (epoch 14, validation-selected)
+- **Training Speed:** 2-4 min/epoch on RTX 4090
+- **Memory Usage:** 8-10 GB (tiny), ~13 GB (small)
 
-## Quick Reference
+## Quick Start: Test Pretrained Models
+
+**Don't want to train from scratch?** Use our pretrained models:
+
+```bash
+# Test tiny variant (6.8M params)
+python -m swin-unet.test_pretrained --variant tiny
+
+# Test small variant (41.3M params)
+python -m swin-unet.test_pretrained --variant small
+
+# Test on CPU
+python -m swin-unet.test_pretrained --variant tiny --cpu
+```
+
+Pretrained models are located in `swin-unet/pretrained/` and were selected based on validation F1 scores. See [pretrained/README.md](pretrained/README.md) for details.
+
+For visualizations, use the dedicated visualization script (see below).
+
+## Quick Reference: Training from Scratch
 
 **Train Tiny Variant (6.8M params, 4-year input):**
 ```bash
