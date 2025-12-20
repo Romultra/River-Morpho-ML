@@ -74,7 +74,7 @@ class TrainConfig:
 class EvalConfig:
     # Pattern for evaluating transformer checkpoints
     checkpoint_pattern: str = "transunet_epoch*.pt"
-    # Default directory for checkpoints (can still be overridden via CLI)
+    # Default directory for checkpoints 
     checkpoint_dir: Path = Path("transformer_cnn_model/checkpoints_transunet")
     # Default CSV for scores
     scores_csv: Path = Path(

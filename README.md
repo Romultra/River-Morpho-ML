@@ -47,7 +47,7 @@ We investigate whether **transformer-based architectures** can overcome these li
 
 - **[QUICK_START.md](QUICK_START.md)** - 5-minute setup and first model training
 - **[swin-unet/README.md](swin-unet/README.md)** - Comprehensive st-Swin-UNet documentation
-- **[report/main.tex](report/main.tex)** - Academic report with detailed methodology and results
+- **[Report/main.tex](Report/main.tex)** - Academic report with detailed methodology and results
 
 ---
 
@@ -83,7 +83,7 @@ River-Morpho-ML/
 │
 ├── data/                      # Satellite imagery and auxiliary data
 ├── benchmarks/                # Baseline comparison models
-├── report/                    # LaTeX report and figures
+├── Report/                    # LaTeX report and figures
 │   ├── main.tex                                                    # Project report tex format
 │   ├── Machine_Learning_Project_2.pdf                              # Project report in pdf format
 │   └── ML Course Project 2 description and guidelines.pdf          
@@ -133,9 +133,7 @@ JamUNet code, it is advised to use the code only on Windows operating system.
 
 **1. TransformerUNet**
 
-All TransformerUNet (TransUNet) files are located within the `transformer_cnn_model/` directory. To configure any parameter of
-the model, the user should modify parameter values within `transformer_cnn_model/config.py`. After modification, the pipeline below
-shows the training and score plotting process in chronological order.
+All TransformerUNet (TransUNet) files are located within the `transformer_cnn_model/` directory. To configure any parameter of the model, the user should modify parameter values within `transformer_cnn_model/config.py`. After modification, the pipeline below shows the training and score plotting process in chronological order.
 
 ```bash
 # Configure in transformer_cnn_model/config.py
@@ -148,8 +146,23 @@ python -m transformer_cnn_model.eval_all_checkpoints
 python -m transformer_cnn_model.plot_score
 ```
 
-Selected checkpoints used in the report are in `transformer_cnn_model/pretrained/`. More detailed docstrings are available in each
-file within `transformer_cnn_model/`.
+** Test Pretrained Models:**
+Selected checkpoints used in the report are in `transformer_cnn_model/pretrained/`. To load a pretrained model, use `transformer_cnn_model/plot_input_output.py` to plot model prediction image and `transformer_cnn_model/plot_misclassification.py` to plot misclassification maps. The test scores are also plotted in `transformer_cnn_model/plot_score.py`. However, the user must edit `checkpoint_pattern`, `checkpoint_dir`, and `scores_csv` in `transformer_cnn_model/config.py` to the file path of the desired pretrained model, i.e. the user must change the following block in `transformer_cnn_model/config.py`:
+
+```python
+@dataclass
+class EvalConfig:
+    # Pattern for evaluating transformer checkpoints
+    checkpoint_pattern: str = "transunet_epoch*.pt"
+    # Default directory for checkpoints 
+    checkpoint_dir: Path = Path("transformer_cnn_model/checkpoints_transunet")
+    # Default CSV for scores
+    scores_csv: Path = Path(
+        "transformer_cnn_model/scores/test_metrics_all_epochs_transunet.csv"
+    )
+```
+
+Depending on if the user wants to preload the 4-year or 9-year pretrained model, the user should also change `year_target` to 5 or 10 respectively in `transformer_cnn_model/config.py`. More detailed docstrings for using `transformer_cnn_model/plot_input_output.py`, `transformer_cnn_model/plot_misclassification.py`, and `transformer_cnn_model/plot_score.py` are given in their respective python files.
 
 **2. st-Swin-UNet**
 
@@ -436,7 +449,7 @@ Despite our hypothesis that transformers would improve temporal modeling, **JamU
 3. **Do not deploy models directly** - benchmark against physics-based fluid simulations first
 4. Acknowledge that ML models lack physical constraints of computational fluid dynamics
 
-See `report/main.tex` Section 1 for detailed ethical risk assessment.
+See `Report/main.tex` Section 1 for detailed ethical risk assessment.
 
 ---
 
