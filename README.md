@@ -128,6 +128,8 @@ pip install -r requirements.txt
 **Note:** For macOS/Linux, install GDAL using your system package manager before step 4. Due to legacy issues with the original 
 JamUNet code, it is advised to use the code only on Windows operating system.
 
+**Note:** st-Swin-UNet requires `torchvision >= 0.12.0`, which provides the `SwinTransformerBlock` and `PatchMerging` building blocks. The CUDA 11.8 install command above installs a compatible version.
+
 
 ### Training Models
 
@@ -346,6 +348,10 @@ All results below are for **4 input years** (base configuration):
 All models use similar training configurations for fair comparison:
 
 ```python
+# Model (transformer_cnn_model/config.py)
+architecture = "transunet"  # baseline vs transformer: "transunet" or "unet3d"
+nhead = 4                   # attention heads; must divide d_model
+
 # Data
 year_target = 5           # 4 input years + 1 target (or 9 + 1)
 batch_size = 8             # Varies by model
@@ -364,6 +370,14 @@ threshold = 0.5            # Water classification threshold
 Model-specific configurations in respective `config.py` files:
 - `transformer_cnn_model/config.py` - TransformerUNet
 - `swin-unet/config.py` - st-Swin-UNet
+
+### Implementation Notes
+
+- **Architecture switch:** In `transformer_cnn_model/config.py`, set `model_cfg.architecture` to `"transunet"` or `"unet3d"` to train either the transformer variant or the UNet3D baseline from the same pipeline.
+- **Device handling:** Models auto-detect CUDA and fall back to CPU; pass `--cpu` to force CPU where supported.
+- **Input padding (st-Swin-UNet):** Inputs are automatically padded so H and W are multiples of `patch_size × 2^(stages−1)` (32 in the default config), so non-divisible sizes such as 1000×500 work without manual resizing.
+- **TransformerUNet chunking:** The temporal transformer processes one sequence per pixel (B×H×W sequences). These are split into chunks of 60,000 to stay under the universal 65,535 batch-dimension limit.
+- **Attention heads:** `nhead` must divide `d_model` (e.g. `d_model=8`, `nhead=4`).
 
 ---
 
